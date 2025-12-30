@@ -1,0 +1,19 @@
+# Dependencies
+node_modules
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Cache
+.cache
+
+# Coverage
+coverage
+
+# Misc
+*.md
+*.json
+*.lock
