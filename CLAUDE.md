@@ -216,3 +216,150 @@ erDiagram
 | データベーススキーマ | Prisma |
 | テストフレームワーク | Vitest |
 | デプロイ | Google Cloud Cloud Run |
+
+## 9. 画面設計
+
+詳細: [docs/screen-definition.md](docs/screen-definition.md)
+
+### 9.1 画面一覧
+
+| 画面ID | 画面名 | URL | 権限 |
+|--------|--------|-----|------|
+| SCR-001 | ログイン画面 | /login | 全員 |
+| SCR-002 | ダッシュボード | / | 認証済み |
+| SCR-003 | 日報作成・編集画面 | /reports/new, /reports/:id/edit | 認証済み |
+| SCR-004 | 日報詳細画面 | /reports/:id | 認証済み |
+| SCR-005 | 営業マスタ画面 | /admin/sales-persons | 管理者 |
+| SCR-006 | 顧客マスタ画面 | /admin/customers | 管理者 |
+
+### 9.2 画面遷移図
+
+```mermaid
+flowchart TD
+    A[ログイン画面<br>SCR-001] --> B[ダッシュボード<br>SCR-002]
+
+    B --> C[日報作成・編集画面<br>SCR-003]
+    B --> D[日報詳細画面<br>SCR-004]
+    B --> E[営業マスタ画面<br>SCR-005]
+    B --> F[顧客マスタ画面<br>SCR-006]
+
+    C --> B
+    D --> B
+    D --> C
+    E --> B
+    F --> B
+
+    style A fill:#e1f5fe
+    style B fill:#fff9c4
+    style C fill:#c8e6c9
+    style D fill:#c8e6c9
+    style E fill:#ffccbc
+    style F fill:#ffccbc
+```
+
+### 9.3 共通コンポーネント
+
+- **ヘッダー**: ロゴ、ユーザー名、ログアウトボタン
+- **ナビゲーション**: ダッシュボード、マスタ管理（管理者のみ）
+- **共通ダイアログ**: 確認ダイアログ、エラーダイアログ、成功通知（トースト）
+
+## 10. API仕様
+
+詳細: [docs/api-specification.md](docs/api-specification.md)
+
+### 10.1 共通仕様
+
+- ベースURL: `/api/v1`
+- 認証方式: Bearer Token (JWT)
+- レスポンス形式: JSON
+
+### 10.2 API一覧
+
+| メソッド | エンドポイント | 説明 | 権限 |
+|----------|----------------|------|------|
+| POST | /api/v1/auth/login | ログイン | 全員 |
+| POST | /api/v1/auth/logout | ログアウト | 認証済み |
+| GET | /api/v1/auth/me | 現在のユーザー情報取得 | 認証済み |
+| GET | /api/v1/reports | 日報一覧取得 | 認証済み |
+| POST | /api/v1/reports | 日報作成 | 認証済み |
+| GET | /api/v1/reports/{id} | 日報詳細取得 | 認証済み |
+| PUT | /api/v1/reports/{id} | 日報更新 | 本人 |
+| DELETE | /api/v1/reports/{id} | 日報削除 | 本人 |
+| GET | /api/v1/reports/{report_id}/comments | コメント一覧取得 | 認証済み |
+| POST | /api/v1/reports/{report_id}/comments | コメント投稿 | 上長・管理者 |
+| PUT | /api/v1/comments/{id} | コメント更新 | 投稿者 |
+| DELETE | /api/v1/comments/{id} | コメント削除 | 投稿者 |
+| GET | /api/v1/sales-persons | 営業一覧取得 | 認証済み |
+| POST | /api/v1/sales-persons | 営業登録 | 管理者 |
+| GET | /api/v1/sales-persons/{id} | 営業詳細取得 | 認証済み |
+| PUT | /api/v1/sales-persons/{id} | 営業更新 | 管理者 |
+| DELETE | /api/v1/sales-persons/{id} | 営業削除 | 管理者 |
+| GET | /api/v1/customers | 顧客一覧取得 | 認証済み |
+| POST | /api/v1/customers | 顧客登録 | 管理者 |
+| GET | /api/v1/customers/{id} | 顧客詳細取得 | 認証済み |
+| PUT | /api/v1/customers/{id} | 顧客更新 | 管理者 |
+| DELETE | /api/v1/customers/{id} | 顧客削除 | 管理者 |
+
+### 10.3 共通エラーコード
+
+| HTTPステータス | コード | 説明 |
+|----------------|--------|------|
+| 400 | BAD_REQUEST | リクエストが不正 |
+| 401 | UNAUTHORIZED | 認証が必要 |
+| 403 | FORBIDDEN | 権限がない |
+| 404 | NOT_FOUND | リソースが見つからない |
+| 409 | CONFLICT | リソースが競合 |
+| 422 | VALIDATION_ERROR | バリデーションエラー |
+| 500 | INTERNAL_ERROR | サーバーエラー |
+
+## 11. テスト仕様
+
+詳細: [docs/test-specification.md](docs/test-specification.md)
+
+### 11.1 テスト方針
+
+| 項目 | 内容 |
+|------|------|
+| テストフレームワーク | Vitest |
+| E2Eテスト | Playwright |
+| カバレッジ目標 | 80%以上 |
+
+### 11.2 テストレベル
+
+| レベル | 対象 | ツール |
+|--------|------|--------|
+| 単体テスト | 関数、ユーティリティ、カスタムフック | Vitest |
+| 結合テスト | APIエンドポイント、データベース連携 | Vitest + Prisma |
+| E2Eテスト | 画面操作、ユーザーシナリオ | Playwright |
+
+### 11.3 テストケース概要
+
+| カテゴリ | テストケース数 |
+|----------|----------------|
+| 単体テスト（ユーティリティ） | 約20件 |
+| 結合テスト（API） | 約50件 |
+| E2Eテスト（シナリオ） | 約15件 |
+| 非機能テスト | 約15件 |
+
+### 11.4 テスト実行コマンド
+
+```bash
+# 単体テスト実行
+npm run test
+
+# 単体テスト（カバレッジ付き）
+npm run test:coverage
+
+# E2Eテスト実行
+npm run test:e2e
+```
+
+### 11.5 テスト完了基準
+
+| 項目 | 基準 |
+|------|------|
+| 単体テスト | 全テストパス、カバレッジ80%以上 |
+| 結合テスト | 全テストパス |
+| E2Eテスト | 主要シナリオ全パス |
+| セキュリティテスト | 致命的な脆弱性なし |
+| パフォーマンステスト | 目標値達成 |
