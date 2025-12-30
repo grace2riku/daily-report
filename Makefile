@@ -2,7 +2,8 @@
 PROJECT_ID := daily-report-482808
 REGION := asia-northeast1
 SERVICE_NAME := daily-report
-IMAGE_NAME := gcr.io/$(PROJECT_ID)/$(SERVICE_NAME)
+IMAGE_REGISTRY := $(REGION)-docker.pkg.dev
+IMAGE_NAME := $(IMAGE_REGISTRY)/$(PROJECT_ID)/$(SERVICE_NAME)/$(SERVICE_NAME)
 
 # Git情報
 GIT_SHA := $(shell git rev-parse --short HEAD)
@@ -17,7 +18,7 @@ help: ## ヘルプを表示
 build: ## Dockerイメージをビルド
 	docker build -t $(IMAGE_TAG) -t $(IMAGE_LATEST) .
 
-push: ## イメージをContainer Registryにプッシュ
+push: ## イメージをArtifact Registryにプッシュ
 	docker push $(IMAGE_TAG)
 	docker push $(IMAGE_LATEST)
 
@@ -46,7 +47,7 @@ logs: ## Cloud Runのログを表示
 		--format "table(timestamp,textPayload)"
 
 configure-docker: ## Docker認証を設定
-	gcloud auth configure-docker
+	gcloud auth configure-docker $(IMAGE_REGISTRY)
 
 set-project: ## GCPプロジェクトを設定
 	gcloud config set project $(PROJECT_ID)
