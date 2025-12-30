@@ -123,7 +123,7 @@
 
 ## 5. ER図
 
-[docs/er-diagram.md](docs/er-diagram.md) を参照
+@docs/er-diagram.md
 
 ## 6. 画面一覧
 
@@ -156,12 +156,12 @@
 
 ## 9. 画面設計
 
-[docs/screen-definition.md](docs/screen-definition.md) を参照
+@docs/screen-definition.md
 
 ## 10. API仕様
 
-[docs/api-specification.md](docs/api-specification.md) を参照
+@docs/api-specification.md
 
 ## 11. テスト仕様
 
-[docs/test-specification.md](docs/test-specification.md) を参照
+@docs/test-specification.md
