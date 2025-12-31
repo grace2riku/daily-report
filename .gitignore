@@ -45,3 +45,9 @@ next-env.d.ts
 
 # claude code
 .claude/settings.local.json
+
+/src/generated/prisma
+
+# database
+*.db
+*.db-journal
