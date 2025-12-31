@@ -121,7 +121,8 @@ export function isToday(date: Date | string): boolean {
  * @returns 未来ならtrue
  */
 export function isFutureDate(date: Date | string): boolean {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  // 引数のDateオブジェクトを変更しないようにコピーを作成
+  const d = new Date(typeof date === 'string' ? date : date.getTime());
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   d.setHours(0, 0, 0, 0);
