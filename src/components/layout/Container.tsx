@@ -1,7 +1,8 @@
+import { type PropsWithChildren } from 'react';
+
 import { cn } from '@/lib/utils';
 
-interface ContainerProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode;
+interface ContainerProps extends PropsWithChildren<React.HTMLAttributes<HTMLDivElement>> {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }
 

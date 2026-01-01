@@ -1,7 +1,8 @@
+import { type PropsWithChildren } from 'react';
+
 import { cn } from '@/lib/utils';
 
-interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode;
+interface GridProps extends PropsWithChildren<React.HTMLAttributes<HTMLDivElement>> {
   cols?: 1 | 2 | 3 | 4 | 6 | 12;
   gap?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
 }
