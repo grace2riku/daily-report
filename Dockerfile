@@ -19,6 +19,9 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Prismaクライアントを生成
+RUN npx prisma generate
+
 RUN npm run build
 
 # 本番イメージ
