@@ -129,3 +129,31 @@ export function isFutureDate(date: Date | string): boolean {
 
   return d > today;
 }
+
+/**
+ * 文字列からDateオブジェクトに変換
+ * @param dateString 日付文字列（YYYY-MM-DD形式を想定）
+ * @returns Dateオブジェクト、無効な場合はnull
+ */
+export function parseDate(dateString: string): Date | null {
+  if (!dateString || typeof dateString !== 'string') return null;
+
+  const d = new Date(dateString);
+
+  if (isNaN(d.getTime())) return null;
+
+  return d;
+}
+
+/**
+ * 今日の日付を取得（YYYY-MM-DD形式）
+ * @returns 今日の日付文字列
+ */
+export function getToday(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
