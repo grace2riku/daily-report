@@ -55,16 +55,30 @@ describe('string utilities', () => {
       expect(truncate(japanese, 7)).toBe(japanese);
     });
 
-    it('should truncate strings with emoji (note: emoji may be split due to UTF-16)', () => {
-      // Note: JavaScript's slice operates on UTF-16 code units.
-      // Emojis are typically 2 code units, so they may be split during truncation.
-      // This is a known limitation of simple truncation.
+    it('should truncate strings with emoji using grapheme-based segmentation', () => {
+      // Intl.Segmenter を使用してグラファム単位で切り詰め
+      // 絵文字が分割されずに正しく処理される
       const emoji = 'Hello 🌍🌎🌏';
+      // 'Hello 🌍🌎🌏' は 10 グラファム (H,e,l,l,o, ,🌍,🌎,🌏)
+      expect(truncate(emoji, 10)).toBe('Hello 🌍🌎🌏'); // ちょうど10グラファムなのでそのまま
+      expect(truncate(emoji, 9)).toBe('Hello 🌍🌎🌏'); // 9グラファムで10より小さいが実際は9グラファム
+    });
+
+    it('should not split emoji when truncating', () => {
+      const emoji = 'Hello 🌍🌎🌏 World';
+      // 'Hello 🌍🌎🌏 World' は 15 グラファム
       const result = truncate(emoji, 10);
-      // The result will contain 7 characters from slice (10-3 for ellipsis)
-      // which may include partial emoji code units
-      expect(result.length).toBe(10);
+      // 10 - 3(ellipsis) = 7 グラファム = 'Hello 🌍' + '...'
+      expect(result).toBe('Hello 🌍...');
       expect(result.endsWith('...')).toBe(true);
+    });
+
+    it('should handle combined emoji correctly', () => {
+      // 複合絵文字（ZWJシーケンス）のテスト
+      const familyEmoji = '👨‍👩‍👧‍👦'; // 家族の絵文字（複数のコードポイントが結合）
+      // 複合絵文字は1グラファムとしてカウントされる
+      expect(truncate(`Hello ${familyEmoji}`, 10)).toBe(`Hello ${familyEmoji}`);
+      expect(truncate(`Hello ${familyEmoji} World`, 10)).toBe(`Hello ${familyEmoji}...`);
     });
 
     it('should handle strings with newlines', () => {

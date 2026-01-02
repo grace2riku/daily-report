@@ -146,7 +146,12 @@ export function parseDate(dateString: string): Date | null {
 }
 
 /**
- * 今日の日付を取得（YYYY-MM-DD形式）
+ * 今日の日付を取得（YYYY-MM-DD形式、ローカルタイムゾーン）
+ *
+ * @note この関数はローカルタイムゾーンを使用します。
+ * サーバー/クライアント間でタイムゾーンが異なる場合は、
+ * getTodayUTC() の使用を検討してください。
+ *
  * @returns 今日の日付文字列
  */
 export function getToday(): string {
@@ -156,4 +161,58 @@ export function getToday(): string {
   const day = String(today.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * 今日の日付を取得（YYYY-MM-DD形式、UTC）
+ *
+ * サーバー/クライアント間でタイムゾーンに依存しない日付が必要な場合に使用します。
+ *
+ * @returns 今日の日付文字列（UTC）
+ */
+export function getTodayUTC(): string {
+  const today = new Date();
+  const year = today.getUTCFullYear();
+  const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(today.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 日付が未来かどうかを判定（UTC基準）
+ *
+ * サーバー/クライアント間でタイムゾーンに依存しない判定が必要な場合に使用します。
+ *
+ * @param date 判定する日付
+ * @returns 未来ならtrue
+ */
+export function isFutureDateUTC(date: Date | string): boolean {
+  const d = new Date(typeof date === 'string' ? date : date.getTime());
+  const today = new Date();
+
+  // UTC基準で日付のみを比較
+  const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+
+  return dUTC > todayUTC;
+}
+
+/**
+ * 日付が今日かどうかを判定（UTC基準）
+ *
+ * サーバー/クライアント間でタイムゾーンに依存しない判定が必要な場合に使用します。
+ *
+ * @param date 判定する日付
+ * @returns 今日ならtrue
+ */
+export function isTodayUTC(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const today = new Date();
+
+  return (
+    d.getUTCFullYear() === today.getUTCFullYear() &&
+    d.getUTCMonth() === today.getUTCMonth() &&
+    d.getUTCDate() === today.getUTCDate()
+  );
 }

@@ -11,6 +11,9 @@ import {
   isFutureDate,
   parseDate,
   getToday,
+  getTodayUTC,
+  isFutureDateUTC,
+  isTodayUTC,
 } from '../date';
 
 describe('date utilities', () => {
@@ -302,6 +305,95 @@ describe('date utilities', () => {
       const parsed = new Date(result);
       expect(parsed).toBeInstanceOf(Date);
       expect(isNaN(parsed.getTime())).toBe(false);
+    });
+  });
+
+  // UTC対応関数のテスト
+  describe('getTodayUTC', () => {
+    it('should return today in YYYY-MM-DD format (UTC)', () => {
+      const result = getTodayUTC();
+      const today = new Date();
+      const expected = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+      expect(result).toBe(expected);
+    });
+
+    it('should match regex pattern YYYY-MM-DD', () => {
+      const result = getTodayUTC();
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should return a parseable date string', () => {
+      const result = getTodayUTC();
+      const parsed = new Date(result);
+      expect(parsed).toBeInstanceOf(Date);
+      expect(isNaN(parsed.getTime())).toBe(false);
+    });
+
+    it('should be consistent regardless of local timezone', () => {
+      // UTCの日付は環境に依存しない一貫した値を返す
+      const result = getTodayUTC();
+      const parts = result.split('-');
+      expect(parts[0]).toHaveLength(4); // Year
+      expect(parts[1]).toHaveLength(2); // Month
+      expect(parts[2]).toHaveLength(2); // Day
+    });
+  });
+
+  describe('isFutureDateUTC', () => {
+    it('should return true for future date (UTC)', () => {
+      const futureDate = new Date();
+      futureDate.setUTCDate(futureDate.getUTCDate() + 1);
+      expect(isFutureDateUTC(futureDate)).toBe(true);
+    });
+
+    it('should return true for future date as string', () => {
+      const futureDate = new Date();
+      futureDate.setUTCDate(futureDate.getUTCDate() + 1);
+      const futureDateString = `${futureDate.getUTCFullYear()}-${String(futureDate.getUTCMonth() + 1).padStart(2, '0')}-${String(futureDate.getUTCDate()).padStart(2, '0')}`;
+      expect(isFutureDateUTC(futureDateString)).toBe(true);
+    });
+
+    it('should return false for today (UTC)', () => {
+      const today = new Date();
+      expect(isFutureDateUTC(today)).toBe(false);
+    });
+
+    it('should return false for past date', () => {
+      const pastDate = new Date();
+      pastDate.setUTCDate(pastDate.getUTCDate() - 1);
+      expect(isFutureDateUTC(pastDate)).toBe(false);
+    });
+
+    it('should not mutate the original Date object', () => {
+      const originalDate = new Date(2030, 0, 15, 10, 30, 45);
+      const originalTime = originalDate.getTime();
+      isFutureDateUTC(originalDate);
+      expect(originalDate.getTime()).toBe(originalTime);
+    });
+  });
+
+  describe('isTodayUTC', () => {
+    it('should return true for today (UTC)', () => {
+      const today = new Date();
+      expect(isTodayUTC(today)).toBe(true);
+    });
+
+    it('should return true for today as string (UTC)', () => {
+      const today = new Date();
+      const todayString = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+      expect(isTodayUTC(todayString)).toBe(true);
+    });
+
+    it('should return false for yesterday (UTC)', () => {
+      const yesterday = new Date();
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      expect(isTodayUTC(yesterday)).toBe(false);
+    });
+
+    it('should return false for tomorrow (UTC)', () => {
+      const tomorrow = new Date();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      expect(isTodayUTC(tomorrow)).toBe(false);
     });
   });
 });
