@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { paginationSchema, reportStatusSchema } from './common';
+
 // 訪問記録のスキーマ
 export const visitRecordSchema = z.object({
   id: z.number().int().positive().optional(),
@@ -13,6 +15,7 @@ export const visitRecordSchema = z.object({
     .string()
     .min(1, '訪問内容を入力してください')
     .max(2000, '訪問内容は2000文字以内で入力してください'),
+  sortOrder: z.number().int().min(0).optional(),
 });
 
 /**
@@ -75,7 +78,7 @@ export const createDailyReportSchema = z.object({
     .max(2000, '明日やることは2000文字以内で入力してください')
     .optional()
     .or(z.literal('')),
-  status: z.enum(['draft', 'submitted', 'reviewed']).default('draft'),
+  status: reportStatusSchema.default('draft'),
   visitRecords: z.array(visitRecordSchema).min(1, '訪問記録を1件以上登録してください'),
 });
 
@@ -85,14 +88,32 @@ export const updateDailyReportSchema = createDailyReportSchema.partial().extend(
 });
 
 // 日報検索クエリのスキーマ
-export const dailyReportQuerySchema = z.object({
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  salesPersonId: z.coerce.number().int().positive().optional(),
-  status: z.enum(['draft', 'submitted', 'reviewed']).optional(),
-  page: z.coerce.number().int().positive().default(1),
-  perPage: z.coerce.number().int().min(1).max(100).default(20),
-});
+export const dailyReportQuerySchema = z
+  .object({
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD形式で入力してください')
+      .optional(),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD形式で入力してください')
+      .optional(),
+    salesPersonId: z.coerce.number().int().positive().optional(),
+    status: reportStatusSchema.optional(),
+  })
+  .merge(paginationSchema)
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) <= new Date(data.endDate);
+      }
+      return true;
+    },
+    {
+      message: '開始日は終了日以前の日付を指定してください',
+      path: ['startDate'],
+    }
+  );
 
 export type VisitRecordInput = z.infer<typeof visitRecordSchema>;
 export type CreateDailyReportInput = z.infer<typeof createDailyReportSchema>;
