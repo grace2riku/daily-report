@@ -32,16 +32,23 @@ const adminNavItems: NavItem[] = [
   { label: '顧客マスタ', href: '/admin/customers' },
 ];
 
-export function Navigation({ userRole, className }: NavigationProps) {
+/**
+ * パスがアクティブかどうかを判定するカスタムフック
+ */
+function useIsActive() {
   const pathname = usePathname();
-  const isAdmin = userRole === 'admin';
 
-  const isActive = (href: string) => {
+  return (href: string) => {
     if (href === '/') {
       return pathname === '/';
     }
     return pathname.startsWith(href);
   };
+}
+
+export function Navigation({ userRole, className }: NavigationProps) {
+  const isActive = useIsActive();
+  const isAdmin = userRole === 'admin';
 
   return (
     <nav className={cn('flex items-center gap-6', className)}>
@@ -97,15 +104,8 @@ interface MobileNavigationProps {
 }
 
 export function MobileNavigation({ userRole, onNavigate, className }: MobileNavigationProps) {
-  const pathname = usePathname();
+  const isActive = useIsActive();
   const isAdmin = userRole === 'admin';
-
-  const isActive = (href: string) => {
-    if (href === '/') {
-      return pathname === '/';
-    }
-    return pathname.startsWith(href);
-  };
 
   return (
     <nav className={cn('flex flex-col gap-1', className)}>

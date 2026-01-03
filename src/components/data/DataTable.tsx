@@ -50,7 +50,7 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   keyExtractor,
@@ -80,7 +80,7 @@ export function DataTable<T extends Record<string, unknown>>({
     if (column.render) {
       return column.render(item, index);
     }
-    const value = item[column.key];
+    const value = (item as Record<string, unknown>)[column.key];
     if (value === null || value === undefined) {
       return '-';
     }
