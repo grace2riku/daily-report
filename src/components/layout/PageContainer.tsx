@@ -37,9 +37,7 @@ export function PageContainer({
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {title && <h1 className="text-2xl font-bold tracking-tight">{title}</h1>}
-            {description && (
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-            )}
+            {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
@@ -73,10 +71,7 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
           <li key={index} className="flex items-center gap-1">
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
             {item.href ? (
-              <Link
-                href={item.href}
-                className="hover:text-foreground transition-colors"
-              >
+              <Link href={item.href} className="hover:text-foreground transition-colors">
                 {item.label}
               </Link>
             ) : (

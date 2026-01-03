@@ -23,9 +23,7 @@ interface NavItem {
   href: string;
 }
 
-const mainNavItems: NavItem[] = [
-  { label: 'ダッシュボード', href: '/' },
-];
+const mainNavItems: NavItem[] = [{ label: 'ダッシュボード', href: '/' }];
 
 const adminNavItems: NavItem[] = [
   { label: '営業マスタ', href: '/admin/sales-persons' },
@@ -82,10 +80,7 @@ export function Navigation({ userRole, className }: NavigationProps) {
           <DropdownMenuContent>
             {adminNavItems.map((item) => (
               <DropdownMenuItem key={item.href} asChild>
-                <Link
-                  href={item.href}
-                  className={cn(isActive(item.href) && 'bg-accent')}
-                >
+                <Link href={item.href} className={cn(isActive(item.href) && 'bg-accent')}>
                   {item.label}
                 </Link>
               </DropdownMenuItem>
@@ -126,9 +121,7 @@ export function MobileNavigation({ userRole, onNavigate, className }: MobileNavi
       {isAdmin && (
         <>
           <div className="my-2 h-px bg-border" />
-          <p className="px-3 py-1 text-xs font-semibold text-muted-foreground">
-            マスタ管理
-          </p>
+          <p className="px-3 py-1 text-xs font-semibold text-muted-foreground">マスタ管理</p>
           {adminNavItems.map((item) => (
             <Link
               key={item.href}

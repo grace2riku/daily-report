@@ -73,10 +73,7 @@ export function SearchInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className={cn(
-            'pl-9',
-            showClearButton && internalValue && 'pr-9',
-          )}
+          className={cn('pl-9', showClearButton && internalValue && 'pr-9')}
           {...props}
         />
         {showClearButton && internalValue && (

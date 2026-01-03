@@ -75,11 +75,7 @@ export function PaginationInfo({
   const end = Math.min(currentPage * perPage, totalCount);
 
   if (totalCount === 0) {
-    return (
-      <p className={cn('text-sm text-muted-foreground', className)}>
-        データがありません
-      </p>
-    );
+    return <p className={cn('text-sm text-muted-foreground', className)}>データがありません</p>;
   }
 
   return (

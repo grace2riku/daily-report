@@ -25,17 +25,12 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <div className={cn('space-y-2', className)}>
-      <Label
-        htmlFor={htmlFor}
-        className={cn(error && 'text-destructive')}
-      >
+      <Label htmlFor={htmlFor} className={cn(error && 'text-destructive')}>
         {label}
         {required && <span className="ml-1 text-destructive">*</span>}
       </Label>
 
-      {description && (
-        <p className="text-sm text-muted-foreground">{description}</p>
-      )}
+      {description && <p className="text-sm text-muted-foreground">{description}</p>}
 
       {children}
 
@@ -55,11 +50,7 @@ interface FormRowProps {
 }
 
 export function FormRow({ children, className }: FormRowProps) {
-  return (
-    <div className={cn('grid gap-4 sm:grid-cols-2', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn('grid gap-4 sm:grid-cols-2', className)}>{children}</div>;
 }
 
 interface FormSectionProps {
@@ -74,9 +65,7 @@ export function FormSection({ title, description, children, className }: FormSec
     <div className={cn('space-y-4', className)}>
       <div>
         <h3 className="text-lg font-medium">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       <div className="space-y-4">{children}</div>
     </div>

@@ -115,10 +115,7 @@ export function DataTable<T extends object>({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className="h-24 text-center">
                   読み込み中...
                 </TableCell>
               </TableRow>
