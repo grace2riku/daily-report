@@ -1,7 +1,7 @@
 /**
  * 認証モジュール
  *
- * JWT認証とCookie操作に関するユーティリティをエクスポートする。
+ * JWT認証、Cookie操作、認証ミドルウェアに関するユーティリティをエクスポートする。
  */
 
 // JWT関連
@@ -22,3 +22,18 @@ export {
   hasAuthCookie,
   AUTH_COOKIE_CONFIG,
 } from './cookie';
+
+// ミドルウェア関連
+export {
+  withAuth,
+  withRole,
+  withAdmin,
+  isSubordinate,
+  canViewReport,
+  canPostComment,
+  canEditReport,
+  canManageMaster,
+} from './middleware';
+
+// ミドルウェアの型定義
+export type { AuthUser, AuthenticatedHandler } from './middleware';
