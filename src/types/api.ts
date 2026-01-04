@@ -27,12 +27,19 @@ export interface ApiErrorResponse {
 // APIレスポンス（成功またはエラー）
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
-// ページネーション情報
+/**
+ * ページネーション情報（API仕様書に準拠: スネークケース）
+ *
+ * 注意: この型はAPIレスポンス用です。
+ * UIコンポーネント（Pagination.tsx, DataTable.tsx）では
+ * TypeScript/Reactの慣習に従いキャメルケース（currentPage等）を使用しています。
+ * APIレスポンスをUIに渡す際は変換が必要です。
+ */
 export interface Pagination {
-  currentPage: number;
-  perPage: number;
-  totalPages: number;
-  totalCount: number;
+  current_page: number;
+  per_page: number;
+  total_pages: number;
+  total_count: number;
 }
 
 // エラーコード
