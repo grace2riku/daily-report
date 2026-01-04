@@ -148,7 +148,10 @@ describe('API Error Classes', () => {
     });
 
     it('should create a conflict error with DUPLICATE_EMPLOYEE_CODE code', () => {
-      const error = new ConflictError('DUPLICATE_EMPLOYEE_CODE', 'この社員番号は既に使用されています');
+      const error = new ConflictError(
+        'DUPLICATE_EMPLOYEE_CODE',
+        'この社員番号は既に使用されています'
+      );
 
       expect(error.code).toBe('DUPLICATE_EMPLOYEE_CODE');
       expect(error.message).toBe('この社員番号は既に使用されています');
@@ -156,7 +159,10 @@ describe('API Error Classes', () => {
     });
 
     it('should create a conflict error with DUPLICATE_EMAIL code', () => {
-      const error = new ConflictError('DUPLICATE_EMAIL', 'このメールアドレスは既に使用されています');
+      const error = new ConflictError(
+        'DUPLICATE_EMAIL',
+        'このメールアドレスは既に使用されています'
+      );
 
       expect(error.code).toBe('DUPLICATE_EMAIL');
       expect(error.message).toBe('このメールアドレスは既に使用されています');
@@ -164,7 +170,10 @@ describe('API Error Classes', () => {
     });
 
     it('should create a conflict error with DUPLICATE_CUSTOMER_CODE code', () => {
-      const error = new ConflictError('DUPLICATE_CUSTOMER_CODE', 'この顧客コードは既に使用されています');
+      const error = new ConflictError(
+        'DUPLICATE_CUSTOMER_CODE',
+        'この顧客コードは既に使用されています'
+      );
 
       expect(error.code).toBe('DUPLICATE_CUSTOMER_CODE');
       expect(error.message).toBe('この顧客コードは既に使用されています');
