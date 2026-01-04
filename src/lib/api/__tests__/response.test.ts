@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateOffset, calculatePagination, errorResponse, successResponse } from '../response';
+import {
+  calculateOffset,
+  calculatePagination,
+  errorResponse,
+  paginatedResponse,
+  successResponse,
+} from '../response';
 
 describe('API Response Helpers', () => {
   describe('successResponse', () => {
@@ -45,6 +51,69 @@ describe('API Response Helpers', () => {
     it('should return HTTP status 200 by default', () => {
       const response = successResponse({ test: true });
       expect(response.status).toBe(200);
+    });
+  });
+
+  describe('paginatedResponse', () => {
+    it('should return a paginated response with data and pagination', async () => {
+      const data = [
+        { id: 1, name: 'Test1' },
+        { id: 2, name: 'Test2' },
+      ];
+      const pagination = {
+        current_page: 1,
+        per_page: 20,
+        total_pages: 5,
+        total_count: 100,
+      };
+      const response = paginatedResponse(data, pagination);
+      const json = await response.json();
+
+      expect(json.success).toBe(true);
+      expect(json.data).toEqual(data);
+      expect(json.pagination).toEqual(pagination);
+    });
+
+    it('should return a paginated response with empty array', async () => {
+      const data: unknown[] = [];
+      const pagination = {
+        current_page: 1,
+        per_page: 20,
+        total_pages: 0,
+        total_count: 0,
+      };
+      const response = paginatedResponse(data, pagination);
+      const json = await response.json();
+
+      expect(json.success).toBe(true);
+      expect(json.data).toEqual([]);
+      expect(json.pagination.total_count).toBe(0);
+    });
+
+    it('should return HTTP status 200 by default', () => {
+      const response = paginatedResponse([], {
+        current_page: 1,
+        per_page: 20,
+        total_pages: 0,
+        total_count: 0,
+      });
+      expect(response.status).toBe(200);
+    });
+
+    it('should include correct pagination structure', async () => {
+      const pagination = {
+        current_page: 3,
+        per_page: 10,
+        total_pages: 10,
+        total_count: 95,
+      };
+      const response = paginatedResponse([{ id: 1 }], pagination);
+      const json = await response.json();
+
+      expect(json.pagination.current_page).toBe(3);
+      expect(json.pagination.per_page).toBe(10);
+      expect(json.pagination.total_pages).toBe(10);
+      expect(json.pagination.total_count).toBe(95);
     });
   });
 
@@ -263,6 +332,49 @@ describe('API Response Helpers', () => {
       expect(pagination.total_pages).toBe(1);
       expect(pagination.total_count).toBe(50);
     });
+
+    // Edge cases
+    it('should handle negative page number', () => {
+      const pagination = calculatePagination(-1, 20, 100);
+
+      expect(pagination.current_page).toBe(-1);
+      expect(pagination.total_pages).toBe(5);
+    });
+
+    it('should handle negative per page', () => {
+      const pagination = calculatePagination(1, -20, 100);
+
+      expect(pagination.per_page).toBe(-20);
+      expect(pagination.total_pages).toBe(-5);
+    });
+
+    it('should handle negative total count', () => {
+      const pagination = calculatePagination(1, 20, -100);
+
+      expect(pagination.total_count).toBe(-100);
+      expect(pagination.total_pages).toBe(-5);
+    });
+
+    it('should handle NaN page number', () => {
+      const pagination = calculatePagination(NaN, 20, 100);
+
+      expect(pagination.current_page).toBeNaN();
+      expect(pagination.total_pages).toBe(5);
+    });
+
+    it('should handle NaN per page', () => {
+      const pagination = calculatePagination(1, NaN, 100);
+
+      expect(pagination.per_page).toBeNaN();
+      expect(pagination.total_pages).toBeNaN();
+    });
+
+    it('should handle NaN total count', () => {
+      const pagination = calculatePagination(1, 20, NaN);
+
+      expect(pagination.total_count).toBeNaN();
+      expect(pagination.total_pages).toBeNaN();
+    });
   });
 
   describe('calculateOffset', () => {
@@ -286,6 +398,27 @@ describe('API Response Helpers', () => {
 
     it('should handle large page numbers', () => {
       expect(calculateOffset(100, 20)).toBe(1980);
+    });
+
+    // Edge cases
+    it('should handle negative page number', () => {
+      expect(calculateOffset(-1, 20)).toBe(-40);
+    });
+
+    it('should handle negative per page', () => {
+      expect(calculateOffset(2, -20)).toBe(-20);
+    });
+
+    it('should handle zero page number', () => {
+      expect(calculateOffset(0, 20)).toBe(-20);
+    });
+
+    it('should handle NaN page number', () => {
+      expect(calculateOffset(NaN, 20)).toBeNaN();
+    });
+
+    it('should handle NaN per page', () => {
+      expect(calculateOffset(2, NaN)).toBeNaN();
     });
   });
 });
