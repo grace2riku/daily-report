@@ -57,17 +57,13 @@ describe('Cookie 操作ヘルパー', () => {
 
       await setAuthCookie(token);
 
-      expect(mockCookies.set).toHaveBeenCalledWith(
-        AUTH_COOKIE_CONFIG.name,
-        token,
-        {
-          maxAge: AUTH_COOKIE_CONFIG.maxAge,
-          httpOnly: AUTH_COOKIE_CONFIG.httpOnly,
-          secure: AUTH_COOKIE_CONFIG.secure,
-          sameSite: AUTH_COOKIE_CONFIG.sameSite,
-          path: AUTH_COOKIE_CONFIG.path,
-        }
-      );
+      expect(mockCookies.set).toHaveBeenCalledWith(AUTH_COOKIE_CONFIG.name, token, {
+        maxAge: AUTH_COOKIE_CONFIG.maxAge,
+        httpOnly: AUTH_COOKIE_CONFIG.httpOnly,
+        secure: AUTH_COOKIE_CONFIG.secure,
+        sameSite: AUTH_COOKIE_CONFIG.sameSite,
+        path: AUTH_COOKIE_CONFIG.path,
+      });
     });
 
     it('空のトークンも設定できる', async () => {
@@ -115,17 +111,13 @@ describe('Cookie 操作ヘルパー', () => {
     it('CookieのmaxAgeを0に設定して削除する', async () => {
       await clearAuthCookie();
 
-      expect(mockCookies.set).toHaveBeenCalledWith(
-        AUTH_COOKIE_CONFIG.name,
-        '',
-        {
-          maxAge: 0,
-          httpOnly: AUTH_COOKIE_CONFIG.httpOnly,
-          secure: AUTH_COOKIE_CONFIG.secure,
-          sameSite: AUTH_COOKIE_CONFIG.sameSite,
-          path: AUTH_COOKIE_CONFIG.path,
-        }
-      );
+      expect(mockCookies.set).toHaveBeenCalledWith(AUTH_COOKIE_CONFIG.name, '', {
+        maxAge: 0,
+        httpOnly: AUTH_COOKIE_CONFIG.httpOnly,
+        secure: AUTH_COOKIE_CONFIG.secure,
+        sameSite: AUTH_COOKIE_CONFIG.sameSite,
+        path: AUTH_COOKIE_CONFIG.path,
+      });
     });
   });
 

@@ -33,9 +33,7 @@ export const JWT_CONFIG = {
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    throw new Error(
-      'JWT_SECRET environment variable is not set. Please set it in your .env file.'
-    );
+    throw new Error('JWT_SECRET environment variable is not set. Please set it in your .env file.');
   }
   // シークレットをUint8Arrayに変換（joseライブラリで必要）
   return new TextEncoder().encode(secret);
@@ -150,10 +148,7 @@ export async function verifyToken(token: string): Promise<JwtVerifyResult> {
           error: 'Token has expired',
         };
       }
-      if (
-        error.message.includes('signature') ||
-        error.message.includes('verification')
-      ) {
+      if (error.message.includes('signature') || error.message.includes('verification')) {
         return {
           valid: false,
           error: 'Invalid token signature',
@@ -204,11 +199,7 @@ export function decodeToken(token: string): JwtPayload | null {
     const role = payload.role;
 
     // 必須フィールドの検証
-    if (
-      typeof userId !== 'number' ||
-      typeof email !== 'string' ||
-      !isValidRole(role)
-    ) {
+    if (typeof userId !== 'number' || typeof email !== 'string' || !isValidRole(role)) {
       return null;
     }
 
@@ -228,9 +219,7 @@ export function decodeToken(token: string): JwtPayload | null {
  * @returns 有効期限のISO 8601形式の文字列
  */
 export function calculateTokenExpiry(): string {
-  const expiryDate = new Date(
-    Date.now() + JWT_CONFIG.EXPIRES_IN_SECONDS * 1000
-  );
+  const expiryDate = new Date(Date.now() + JWT_CONFIG.EXPIRES_IN_SECONDS * 1000);
   return expiryDate.toISOString();
 }
 
@@ -255,9 +244,7 @@ function isValidRole(role: unknown): role is UserRole {
  * const token = extractTokenFromHeader('Bearer eyJhbGc...');
  * ```
  */
-export function extractTokenFromHeader(
-  authHeader: string | null
-): string | null {
+export function extractTokenFromHeader(authHeader: string | null): string | null {
   if (!authHeader) {
     return null;
   }
