@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright report files
+    "playwright-report/**",
   ]),
   {
     rules: {

@@ -94,7 +94,7 @@ export async function verifyToken(token: string): Promise<JwtVerifyResult> {
   if (!token) {
     return {
       valid: false,
-      error: 'Token is required',
+      error: 'トークンが必要です',
     };
   }
 
@@ -113,21 +113,21 @@ export async function verifyToken(token: string): Promise<JwtVerifyResult> {
     if (typeof userId !== 'number') {
       return {
         valid: false,
-        error: 'Invalid payload: userId must be a number',
+        error: '無効なペイロード: userIdは数値である必要があります',
       };
     }
 
     if (typeof email !== 'string') {
       return {
         valid: false,
-        error: 'Invalid payload: email must be a string',
+        error: '無効なペイロード: emailは文字列である必要があります',
       };
     }
 
     if (!isValidRole(role)) {
       return {
         valid: false,
-        error: 'Invalid payload: role must be member, manager, or admin',
+        error: '無効なペイロード: roleはmember, manager, adminのいずれかである必要があります',
       };
     }
 
@@ -145,26 +145,26 @@ export async function verifyToken(token: string): Promise<JwtVerifyResult> {
       if (error.message.includes('expired')) {
         return {
           valid: false,
-          error: 'Token has expired',
+          error: 'トークンの有効期限が切れています',
         };
       }
       if (error.message.includes('signature') || error.message.includes('verification')) {
         return {
           valid: false,
-          error: 'Invalid token signature',
+          error: 'トークンの署名が無効です',
         };
       }
       if (error.message.includes('malformed')) {
         return {
           valid: false,
-          error: 'Token is malformed',
+          error: 'トークンの形式が不正です',
         };
       }
     }
 
     return {
       valid: false,
-      error: 'Token verification failed',
+      error: 'トークンの検証に失敗しました',
     };
   }
 }
