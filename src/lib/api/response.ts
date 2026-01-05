@@ -59,10 +59,10 @@ export function calculatePagination(page: number, perPage: number, totalCount: n
   const totalPages = Math.ceil(totalCount / perPage);
 
   return {
-    currentPage: page,
-    perPage,
-    totalPages,
-    totalCount,
+    current_page: page,
+    per_page: perPage,
+    total_pages: totalPages,
+    total_count: totalCount,
   };
 }
 

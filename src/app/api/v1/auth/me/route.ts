@@ -1,43 +1,59 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-import { successResponse } from '@/lib/api/response';
-import { withAuth, type AuthenticatedUser } from '@/lib/auth/middleware';
-import prisma from '@/lib/prisma';
+import { successResponse, errorResponse } from '@/lib/api/response';
+import { withAuth, type AuthUser } from '@/lib/auth/middleware';
+import { prisma } from '@/lib/prisma';
 
 /**
  * GET /api/v1/auth/me
  * 現在のログインユーザー情報を取得する
  */
-export const GET = withAuth(async (_request: NextRequest, user: AuthenticatedUser) => {
-  // 上長情報を取得
-  let manager: { id: number; name: string } | null = null;
-
-  if (user.managerId) {
-    const managerData = await prisma.salesPerson.findUnique({
-      where: { id: user.managerId },
+export async function GET(request: NextRequest) {
+  return withAuth(request, async (_req, user: AuthUser): Promise<NextResponse> => {
+    // データベースからユーザーの詳細情報を取得
+    const salesPerson = await prisma.salesPerson.findUnique({
+      where: { id: user.id },
       select: {
         id: true,
+        employeeCode: true,
         name: true,
+        email: true,
+        role: true,
+        managerId: true,
+        isActive: true,
+        manager: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
-    if (managerData) {
-      manager = {
-        id: managerData.id,
-        name: managerData.name,
-      };
+    if (!salesPerson) {
+      return errorResponse('UNAUTHORIZED', 'ユーザーが見つかりません');
     }
-  }
 
-  // レスポンスデータを構築
-  const responseData = {
-    id: user.id,
-    employee_code: user.employeeCode,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    manager,
-  };
+    // アカウントが無効化されている場合
+    if (!salesPerson.isActive) {
+      return errorResponse('ACCOUNT_DISABLED', 'アカウントが無効化されています');
+    }
 
-  return successResponse(responseData);
-});
+    // レスポンスデータを構築
+    const responseData = {
+      id: salesPerson.id,
+      employee_code: salesPerson.employeeCode,
+      name: salesPerson.name,
+      email: salesPerson.email,
+      role: salesPerson.role,
+      manager: salesPerson.manager
+        ? {
+            id: salesPerson.manager.id,
+            name: salesPerson.manager.name,
+          }
+        : null,
+    };
+
+    return successResponse(responseData);
+  });
+}

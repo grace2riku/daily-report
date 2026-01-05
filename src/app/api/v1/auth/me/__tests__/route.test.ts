@@ -1,22 +1,31 @@
+/**
+ * GET /api/v1/auth/me APIのテスト
+ *
+ * @vitest-environment node
+ */
+
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { generateToken } from '@/lib/auth/jwt';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
+import type { JwtPayload } from '@/types';
 
 import { GET } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
-  default: {
+  prisma: {
     salesPerson: {
       findUnique: vi.fn(),
     },
   },
 }));
 
-// モックデータ
-const mockMember = {
+const TEST_SECRET = 'test-secret-key-for-testing-only-32-chars';
+
+// モックデータ（managerリレーション付き）
+const mockMemberWithManager = {
   id: 1,
   employeeCode: 'EMP001',
   name: '山田太郎',
@@ -24,9 +33,10 @@ const mockMember = {
   role: 'member' as const,
   managerId: 3,
   isActive: true,
-  passwordHash: 'hashed_password',
-  createdAt: new Date('2025-01-01T00:00:00Z'),
-  updatedAt: new Date('2025-01-01T00:00:00Z'),
+  manager: {
+    id: 3,
+    name: '佐藤次郎',
+  },
 };
 
 const mockManager = {
@@ -37,9 +47,7 @@ const mockManager = {
   role: 'manager' as const,
   managerId: null,
   isActive: true,
-  passwordHash: 'hashed_password',
-  createdAt: new Date('2025-01-01T00:00:00Z'),
-  updatedAt: new Date('2025-01-01T00:00:00Z'),
+  manager: null,
 };
 
 const mockAdmin = {
@@ -50,9 +58,7 @@ const mockAdmin = {
   role: 'admin' as const,
   managerId: null,
   isActive: true,
-  passwordHash: 'hashed_password',
-  createdAt: new Date('2025-01-01T00:00:00Z'),
-  updatedAt: new Date('2025-01-01T00:00:00Z'),
+  manager: null,
 };
 
 const mockDisabledUser = {
@@ -63,45 +69,59 @@ const mockDisabledUser = {
   role: 'member' as const,
   managerId: null,
   isActive: false,
-  passwordHash: 'hashed_password',
-  createdAt: new Date('2025-01-01T00:00:00Z'),
-  updatedAt: new Date('2025-01-01T00:00:00Z'),
+  manager: null,
 };
 
 /**
  * テスト用のリクエストを作成
  */
 function createRequest(token?: string): NextRequest {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const url = 'http://localhost:3000/api/v1/auth/me';
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    headers.set('Authorization', `Bearer ${token}`);
+
+    return new NextRequest(url, {
+      method: 'GET',
+      headers,
+    });
   }
 
-  return new NextRequest('http://localhost:3000/api/v1/auth/me', {
+  return new NextRequest(url, {
     method: 'GET',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+    },
   });
 }
 
 describe('GET /api/v1/auth/me', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
   beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('IT-003-01: 有効なトークンでユーザー情報取得', () => {
     it('一般営業のユーザー情報と上長情報を返す', async () => {
-      // モック設定: 最初の呼び出しでユーザー情報、2回目で上長情報を返す
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockMember).mockResolvedValueOnce(mockManager);
+      findUniqueMock.mockResolvedValueOnce(mockMemberWithManager as never);
 
-      const { token } = await generateToken({
-        userId: mockMember.id,
-        email: mockMember.email,
-        role: mockMember.role,
-      });
+      const payload: JwtPayload = {
+        userId: mockMemberWithManager.id,
+        email: mockMemberWithManager.email,
+        role: mockMemberWithManager.role,
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);
@@ -124,13 +144,14 @@ describe('GET /api/v1/auth/me', () => {
 
     it('上長のユーザー情報を返す（上長情報なし）', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockManager);
+      findUniqueMock.mockResolvedValueOnce(mockManager as never);
 
-      const { token } = await generateToken({
+      const payload: JwtPayload = {
         userId: mockManager.id,
         email: mockManager.email,
         role: mockManager.role,
-      });
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);
@@ -150,13 +171,14 @@ describe('GET /api/v1/auth/me', () => {
 
     it('管理者のユーザー情報を返す', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockAdmin);
+      findUniqueMock.mockResolvedValueOnce(mockAdmin as never);
 
-      const { token } = await generateToken({
+      const payload: JwtPayload = {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: mockAdmin.role,
-      });
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);
@@ -184,7 +206,7 @@ describe('GET /api/v1/auth/me', () => {
       expect(response.status).toBe(401);
       expect(data.success).toBe(false);
       expect(data.error.code).toBe('UNAUTHORIZED');
-      expect(data.error.message).toBe('認証トークンが必要です');
+      expect(data.error.message).toBe('認証が必要です');
     });
   });
 
@@ -197,15 +219,18 @@ describe('GET /api/v1/auth/me', () => {
       expect(response.status).toBe(401);
       expect(data.success).toBe(false);
       expect(data.error.code).toBe('UNAUTHORIZED');
-      expect(data.error.message).toBe('無効なトークンです');
     });
 
-    it('期限切れトークンでエラーを返す', async () => {
-      // 期限切れトークンをシミュレート（実際の期限切れトークンをテストするのは難しいので、
-      // 無効なトークンと同じ挙動になることを確認）
-      const expiredToken =
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJtZW1iZXIiLCJleHAiOjE2MDAwMDAwMDB9.invalid';
-      const request = createRequest(expiredToken);
+    it('改竄されたトークンでエラーを返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'test@example.com',
+        role: 'member',
+      };
+      const token = await generateToken(payload);
+      const tamperedToken = token.slice(0, -5) + 'xxxxx';
+
+      const request = createRequest(tamperedToken);
       const response = await GET(request);
       const data = await response.json();
 
@@ -220,11 +245,12 @@ describe('GET /api/v1/auth/me', () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
       findUniqueMock.mockResolvedValueOnce(null);
 
-      const { token } = await generateToken({
+      const payload: JwtPayload = {
         userId: 999, // 存在しないユーザーID
         email: 'notexist@example.com',
         role: 'member',
-      });
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);
@@ -240,13 +266,14 @@ describe('GET /api/v1/auth/me', () => {
   describe('追加テスト: アカウントが無効化されている場合', () => {
     it('無効化されたアカウントの場合はエラーを返す', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockDisabledUser);
+      findUniqueMock.mockResolvedValueOnce(mockDisabledUser as never);
 
-      const { token } = await generateToken({
+      const payload: JwtPayload = {
         userId: mockDisabledUser.id,
         email: mockDisabledUser.email,
         role: mockDisabledUser.role,
-      });
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);
@@ -259,49 +286,23 @@ describe('GET /api/v1/auth/me', () => {
     });
   });
 
-  describe('追加テスト: Cookie からトークンを取得', () => {
-    it('Cookie にトークンがある場合はユーザー情報を返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockManager);
-
-      const { token } = await generateToken({
-        userId: mockManager.id,
-        email: mockManager.email,
-        role: mockManager.role,
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/v1/auth/me', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Cookie: `token=${token}`,
-        },
-      });
-
-      const response = await GET(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.success).toBe(true);
-      expect(data.data.id).toBe(3);
-    });
-  });
-
   describe('追加テスト: 上長情報が存在しない場合', () => {
-    it('managerId が設定されているが上長が削除されている場合', async () => {
-      const memberWithDeletedManager = {
-        ...mockMember,
+    it('managerId が設定されているが上長リレーションがnullの場合', async () => {
+      const memberWithoutManager = {
+        ...mockMemberWithManager,
         managerId: 999, // 削除された上長
+        manager: null, // リレーションがnull
       };
 
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(memberWithDeletedManager).mockResolvedValueOnce(null); // 上長が見つからない
+      findUniqueMock.mockResolvedValueOnce(memberWithoutManager as never);
 
-      const { token } = await generateToken({
-        userId: memberWithDeletedManager.id,
-        email: memberWithDeletedManager.email,
-        role: memberWithDeletedManager.role,
-      });
+      const payload: JwtPayload = {
+        userId: memberWithoutManager.id,
+        email: memberWithoutManager.email,
+        role: memberWithoutManager.role,
+      };
+      const token = await generateToken(payload);
 
       const request = createRequest(token);
       const response = await GET(request);

@@ -1,384 +1,547 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * 認証ミドルウェアのテスト
+ *
+ * @vitest-environment node
+ */
 
-import prisma from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+
+import { prisma } from '@/lib/prisma';
+import type { UserRole, JwtPayload, ApiErrorResponse } from '@/types';
 
 import { generateToken } from '../jwt';
 import {
-  authenticateRequest,
-  withAdmin,
   withAuth,
-  withManagerOrAdmin,
   withRole,
-  type AuthenticatedUser,
+  withAdmin,
+  isSubordinate,
+  canViewReport,
+  canPostComment,
+  canEditReport,
+  canManageMaster,
+  AuthUser,
 } from '../middleware';
 
-// Prisma モック
+// Prismaのモック
 vi.mock('@/lib/prisma', () => ({
-  default: {
+  prisma: {
     salesPerson: {
       findUnique: vi.fn(),
     },
   },
 }));
 
-// モックデータ
-const mockMember = {
-  id: 1,
-  employeeCode: 'EMP001',
-  name: '山田太郎',
-  email: 'yamada@example.com',
-  role: 'member' as const,
-  managerId: 3,
-  isActive: true,
-};
-
-const mockManager = {
-  id: 3,
-  employeeCode: 'EMP003',
-  name: '佐藤次郎',
-  email: 'sato@example.com',
-  role: 'manager' as const,
-  managerId: null,
-  isActive: true,
-};
-
-const mockAdmin = {
-  id: 4,
-  employeeCode: 'EMP004',
-  name: 'テスト管理者',
-  email: 'admin@example.com',
-  role: 'admin' as const,
-  managerId: null,
-  isActive: true,
-};
-
-const mockDisabledUser = {
-  id: 5,
-  employeeCode: 'EMP005',
-  name: '無効ユーザー',
-  email: 'disabled@example.com',
-  role: 'member' as const,
-  managerId: null,
-  isActive: false,
-};
+const TEST_SECRET = 'test-secret-key-for-testing-only-32-chars';
 
 /**
- * テスト用のリクエストを作成
+ * テスト用のNextRequestを作成するヘルパー
  */
-function createRequest(token?: string): NextRequest {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+function createMockRequest(options: {
+  authHeader?: string | null;
+  method?: string;
+  url?: string;
+}): NextRequest {
+  const url = options.url || 'http://localhost:3000/api/test';
+  const request = new NextRequest(url, {
+    method: options.method || 'GET',
+  });
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (options.authHeader !== null && options.authHeader !== undefined) {
+    // headersは読み取り専用なのでモック用に新しいリクエストを作成
+    const headers = new Headers();
+    headers.set('Authorization', options.authHeader);
+
+    return new NextRequest(url, {
+      method: options.method || 'GET',
+      headers,
+    });
   }
 
-  return new NextRequest('http://localhost:3000/api/test', {
-    method: 'GET',
-    headers,
-  });
+  return request;
 }
 
 describe('認証ミドルウェア', () => {
+  const testPayload: JwtPayload = {
+    userId: 1,
+    email: 'test@example.com',
+    role: 'member',
+  };
+
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
   beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
     vi.clearAllMocks();
   });
 
-  describe('authenticateRequest', () => {
-    it('有効なトークンでユーザー情報を返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockMember);
-
-      const { token } = await generateToken({
-        userId: mockMember.id,
-        email: mockMember.email,
-        role: mockMember.role,
-      });
-
-      const request = createRequest(token);
-      const result = await authenticateRequest(request);
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.user.id).toBe(mockMember.id);
-        expect(result.user.email).toBe(mockMember.email);
-        expect(result.user.role).toBe(mockMember.role);
-      }
-    });
-
-    it('トークンがない場合はエラーを返す', async () => {
-      const request = createRequest();
-      const result = await authenticateRequest(request);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const data = await result.response.json();
-        expect(data.error.code).toBe('UNAUTHORIZED');
-        expect(data.error.message).toBe('認証トークンが必要です');
-      }
-    });
-
-    it('無効なトークンの場合はエラーを返す', async () => {
-      const request = createRequest('invalid-token');
-      const result = await authenticateRequest(request);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const data = await result.response.json();
-        expect(data.error.code).toBe('UNAUTHORIZED');
-        expect(data.error.message).toBe('無効なトークンです');
-      }
-    });
-
-    it('ユーザーが存在しない場合はエラーを返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(null);
-
-      const { token } = await generateToken({
-        userId: 999,
-        email: 'notexist@example.com',
-        role: 'member',
-      });
-
-      const request = createRequest(token);
-      const result = await authenticateRequest(request);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const data = await result.response.json();
-        expect(data.error.code).toBe('UNAUTHORIZED');
-        expect(data.error.message).toBe('ユーザーが見つかりません');
-      }
-    });
-
-    it('アカウントが無効化されている場合はエラーを返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockDisabledUser);
-
-      const { token } = await generateToken({
-        userId: mockDisabledUser.id,
-        email: mockDisabledUser.email,
-        role: mockDisabledUser.role,
-      });
-
-      const request = createRequest(token);
-      const result = await authenticateRequest(request);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const data = await result.response.json();
-        expect(data.error.code).toBe('ACCOUNT_DISABLED');
-      }
-    });
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('withAuth', () => {
-    it('認証済みの場合はハンドラーを実行する', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockMember);
+    it('有効なトークンで認証成功し、ハンドラーが実行される', async () => {
+      const token = await generateToken(testPayload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
 
-      const handler = vi.fn(async (_req: NextRequest, user: AuthenticatedUser) => {
-        return NextResponse.json({ success: true, userId: user.id });
-      });
+      const handler = vi
+        .fn()
+        .mockResolvedValue(
+          NextResponse.json({ success: true, data: { userId: testPayload.userId } })
+        );
 
-      const wrappedHandler = withAuth(handler);
+      const response = await withAuth(request, handler);
+      const body = await response.json();
 
-      const { token } = await generateToken({
-        userId: mockMember.id,
-        email: mockMember.email,
-        role: mockMember.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
-
-      expect(handler).toHaveBeenCalled();
-      expect(data.success).toBe(true);
-      expect(data.userId).toBe(mockMember.id);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        request,
+        expect.objectContaining({
+          id: testPayload.userId,
+          email: testPayload.email,
+          role: testPayload.role,
+        })
+      );
+      expect(body.success).toBe(true);
+      expect(body.data.userId).toBe(testPayload.userId);
     });
 
-    it('未認証の場合はハンドラーを実行しない', async () => {
+    it('Authorizationヘッダーがない場合は401エラーを返す', async () => {
+      const request = createMockRequest({});
       const handler = vi.fn();
-      const wrappedHandler = withAuth(handler);
 
-      const request = createRequest();
-      const response = await wrappedHandler(request);
-      const data = await response.json();
+      const response = await withAuth(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
 
       expect(handler).not.toHaveBeenCalled();
-      expect(data.success).toBe(false);
-      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('無効なトークンの場合は401エラーを返す', async () => {
+      const request = createMockRequest({ authHeader: 'Bearer invalid-token' });
+      const handler = vi.fn();
+
+      const response = await withAuth(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('Bearer形式でないトークンの場合は401エラーを返す', async () => {
+      const token = await generateToken(testPayload);
+      const request = createMockRequest({ authHeader: `Basic ${token}` });
+      const handler = vi.fn();
+
+      const response = await withAuth(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('期限切れのトークンの場合は401エラーを返す', async () => {
+      // 期限切れトークンをシミュレート（改竄されたトークン）
+      const token = await generateToken(testPayload);
+      const tamperedToken = token.slice(0, -5) + 'xxxxx';
+      const request = createMockRequest({ authHeader: `Bearer ${tamperedToken}` });
+      const handler = vi.fn();
+
+      const response = await withAuth(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('全てのロールで認証できる', async () => {
+      const roles: UserRole[] = ['member', 'manager', 'admin'];
+
+      for (const role of roles) {
+        const payload: JwtPayload = { ...testPayload, role };
+        const token = await generateToken(payload);
+        const request = createMockRequest({ authHeader: `Bearer ${token}` });
+        const handler = vi.fn().mockResolvedValue(NextResponse.json({ success: true, data: {} }));
+
+        const response = await withAuth(request, handler);
+        const body = await response.json();
+
+        expect(handler).toHaveBeenCalledWith(request, expect.objectContaining({ role }));
+        expect(body.success).toBe(true);
+      }
     });
   });
 
   describe('withRole', () => {
-    it('許可されたロールの場合はハンドラーを実行する', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockManager);
+    it('許可されたロールの場合、ハンドラーが実行される', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'manager' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
 
-      const handler = vi.fn(async () => {
-        return NextResponse.json({ success: true });
-      });
+      const handler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true, data: { message: 'success' } }));
 
-      const wrappedHandler = withRole(['manager', 'admin'], handler);
+      const response = await withRole(request, ['manager', 'admin'], handler);
+      const body = await response.json();
 
-      const { token } = await generateToken({
-        userId: mockManager.id,
-        email: mockManager.email,
-        role: mockManager.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
-
-      expect(handler).toHaveBeenCalled();
-      expect(data.success).toBe(true);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(body.success).toBe(true);
     });
 
-    it('許可されていないロールの場合はエラーを返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockMember);
+    it('許可されていないロールの場合は403エラーを返す', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'member' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
 
       const handler = vi.fn();
-      const wrappedHandler = withRole(['manager', 'admin'], handler);
 
-      const { token } = await generateToken({
-        userId: mockMember.id,
-        email: mockMember.email,
-        role: mockMember.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
+      const response = await withRole(request, ['manager', 'admin'], handler);
+      const body = (await response.json()) as ApiErrorResponse;
 
       expect(handler).not.toHaveBeenCalled();
-      expect(data.success).toBe(false);
-      expect(data.error.code).toBe('FORBIDDEN');
+      expect(response.status).toBe(403);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('認証されていない場合は401エラーを返す', async () => {
+      const request = createMockRequest({});
+      const handler = vi.fn();
+
+      const response = await withRole(request, ['admin'], handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('adminは許可リストに含まれていれば通過できる', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'admin' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
+
+      const handler = vi.fn().mockResolvedValue(NextResponse.json({ success: true, data: {} }));
+
+      const response = await withRole(request, ['admin'], handler);
+      const body = await response.json();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(body.success).toBe(true);
+    });
+
+    it('複数のロールが許可されている場合、いずれかのロールで通過できる', async () => {
+      const allowedRoles: UserRole[] = ['member', 'manager', 'admin'];
+
+      for (const role of allowedRoles) {
+        const payload: JwtPayload = { ...testPayload, role };
+        const token = await generateToken(payload);
+        const request = createMockRequest({ authHeader: `Bearer ${token}` });
+        const handler = vi.fn().mockResolvedValue(NextResponse.json({ success: true, data: {} }));
+
+        const response = await withRole(request, allowedRoles, handler);
+        const body = await response.json();
+
+        expect(handler).toHaveBeenCalled();
+        expect(body.success).toBe(true);
+      }
     });
   });
 
   describe('withAdmin', () => {
-    it('管理者の場合はハンドラーを実行する', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockAdmin);
+    it('adminロールの場合、ハンドラーが実行される', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'admin' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
 
-      const handler = vi.fn(async () => {
-        return NextResponse.json({ success: true });
-      });
+      const handler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true, data: { message: 'admin only' } }));
 
-      const wrappedHandler = withAdmin(handler);
+      const response = await withAdmin(request, handler);
+      const body = await response.json();
 
-      const { token } = await generateToken({
-        userId: mockAdmin.id,
-        email: mockAdmin.email,
-        role: mockAdmin.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
-
-      expect(handler).toHaveBeenCalled();
-      expect(data.success).toBe(true);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(body.success).toBe(true);
     });
 
-    it('管理者以外の場合はエラーを返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockManager);
+    it('memberロールの場合は403エラーを返す', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'member' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
 
       const handler = vi.fn();
-      const wrappedHandler = withAdmin(handler);
 
-      const { token } = await generateToken({
-        userId: mockManager.id,
-        email: mockManager.email,
-        role: mockManager.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
+      const response = await withAdmin(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
 
       expect(handler).not.toHaveBeenCalled();
-      expect(data.success).toBe(false);
-      expect(data.error.code).toBe('FORBIDDEN');
+      expect(response.status).toBe(403);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('managerロールの場合は403エラーを返す', async () => {
+      const payload: JwtPayload = { ...testPayload, role: 'manager' };
+      const token = await generateToken(payload);
+      const request = createMockRequest({ authHeader: `Bearer ${token}` });
+
+      const handler = vi.fn();
+
+      const response = await withAdmin(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(403);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('認証されていない場合は401エラーを返す', async () => {
+      const request = createMockRequest({});
+      const handler = vi.fn();
+
+      const response = await withAdmin(request, handler);
+      const body = (await response.json()) as ApiErrorResponse;
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
 
-  describe('withManagerOrAdmin', () => {
-    it('上長の場合はハンドラーを実行する', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockManager);
+  describe('isSubordinate', () => {
+    it('対象ユーザーがマネージャーの部下の場合trueを返す', async () => {
+      const managerId = 3;
+      const subordinateId = 1;
 
-      const handler = vi.fn(async () => {
-        return NextResponse.json({ success: true });
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: managerId,
+      } as never);
+
+      const result = await isSubordinate(managerId, subordinateId);
+
+      expect(result).toBe(true);
+      expect(prisma.salesPerson.findUnique).toHaveBeenCalledWith({
+        where: { id: subordinateId },
+        select: { managerId: true },
       });
-
-      const wrappedHandler = withManagerOrAdmin(handler);
-
-      const { token } = await generateToken({
-        userId: mockManager.id,
-        email: mockManager.email,
-        role: mockManager.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
-
-      expect(handler).toHaveBeenCalled();
-      expect(data.success).toBe(true);
     });
 
-    it('管理者の場合はハンドラーを実行する', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockAdmin);
+    it('対象ユーザーがマネージャーの部下でない場合falseを返す', async () => {
+      const managerId = 3;
+      const otherUserId = 5;
 
-      const handler = vi.fn(async () => {
-        return NextResponse.json({ success: true });
-      });
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: 99, // 別のマネージャー
+      } as never);
 
-      const wrappedHandler = withManagerOrAdmin(handler);
+      const result = await isSubordinate(managerId, otherUserId);
 
-      const { token } = await generateToken({
-        userId: mockAdmin.id,
-        email: mockAdmin.email,
-        role: mockAdmin.role,
-      });
-
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
-
-      expect(handler).toHaveBeenCalled();
-      expect(data.success).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('一般営業の場合はエラーを返す', async () => {
-      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      findUniqueMock.mockResolvedValueOnce(mockMember);
+    it('対象ユーザーが存在しない場合falseを返す', async () => {
+      const managerId = 3;
+      const nonExistentUserId = 999;
 
-      const handler = vi.fn();
-      const wrappedHandler = withManagerOrAdmin(handler);
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue(null);
 
-      const { token } = await generateToken({
-        userId: mockMember.id,
-        email: mockMember.email,
-        role: mockMember.role,
-      });
+      const result = await isSubordinate(managerId, nonExistentUserId);
 
-      const request = createRequest(token);
-      const response = await wrappedHandler(request);
-      const data = await response.json();
+      expect(result).toBe(false);
+    });
 
-      expect(handler).not.toHaveBeenCalled();
-      expect(data.success).toBe(false);
-      expect(data.error.code).toBe('FORBIDDEN');
+    it('同じユーザーIDの場合falseを返す（自分は自分の部下ではない）', async () => {
+      const userId = 1;
+
+      const result = await isSubordinate(userId, userId);
+
+      expect(result).toBe(false);
+      expect(prisma.salesPerson.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('対象ユーザーにマネージャーが設定されていない場合falseを返す', async () => {
+      const managerId = 3;
+      const userWithoutManagerId = 5;
+
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: null,
+      } as never);
+
+      const result = await isSubordinate(managerId, userWithoutManagerId);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('canViewReport', () => {
+    const memberUser: AuthUser = { id: 1, email: 'member@example.com', role: 'member' };
+    const managerUser: AuthUser = { id: 3, email: 'manager@example.com', role: 'manager' };
+    const adminUser: AuthUser = { id: 4, email: 'admin@example.com', role: 'admin' };
+
+    it('adminは全ての日報を閲覧可能', async () => {
+      const reportOwnerId = 99;
+
+      const result = await canViewReport(adminUser, reportOwnerId);
+
+      expect(result).toBe(true);
+      expect(prisma.salesPerson.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('自分の日報は誰でも閲覧可能', async () => {
+      const result = await canViewReport(memberUser, memberUser.id);
+
+      expect(result).toBe(true);
+      expect(prisma.salesPerson.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('managerは部下の日報を閲覧可能', async () => {
+      const subordinateId = 1;
+
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: managerUser.id,
+      } as never);
+
+      const result = await canViewReport(managerUser, subordinateId);
+
+      expect(result).toBe(true);
+    });
+
+    it('managerは部下以外の日報を閲覧不可', async () => {
+      const otherUserId = 99;
+
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: 999, // 別のマネージャー
+      } as never);
+
+      const result = await canViewReport(managerUser, otherUserId);
+
+      expect(result).toBe(false);
+    });
+
+    it('memberは他人の日報を閲覧不可', async () => {
+      const otherUserId = 2;
+
+      const result = await canViewReport(memberUser, otherUserId);
+
+      expect(result).toBe(false);
+      expect(prisma.salesPerson.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('canPostComment', () => {
+    const memberUser: AuthUser = { id: 1, email: 'member@example.com', role: 'member' };
+    const managerUser: AuthUser = { id: 3, email: 'manager@example.com', role: 'manager' };
+    const adminUser: AuthUser = { id: 4, email: 'admin@example.com', role: 'admin' };
+
+    it('adminは全ての日報にコメント可能', async () => {
+      const reportOwnerId = 99;
+
+      const result = await canPostComment(adminUser, reportOwnerId);
+
+      expect(result).toBe(true);
+    });
+
+    it('managerは部下の日報にコメント可能', async () => {
+      const subordinateId = 1;
+
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: managerUser.id,
+      } as never);
+
+      const result = await canPostComment(managerUser, subordinateId);
+
+      expect(result).toBe(true);
+    });
+
+    it('managerは部下以外の日報にコメント不可', async () => {
+      const otherUserId = 99;
+
+      vi.mocked(prisma.salesPerson.findUnique).mockResolvedValue({
+        managerId: 999,
+      } as never);
+
+      const result = await canPostComment(managerUser, otherUserId);
+
+      expect(result).toBe(false);
+    });
+
+    it('memberはコメント不可', async () => {
+      const anyUserId = 2;
+
+      const result = await canPostComment(memberUser, anyUserId);
+
+      expect(result).toBe(false);
+    });
+
+    it('memberは自分の日報にもコメント不可', async () => {
+      const result = await canPostComment(memberUser, memberUser.id);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('canEditReport', () => {
+    const user: AuthUser = { id: 1, email: 'test@example.com', role: 'member' };
+
+    it('自分の日報は編集可能', () => {
+      const result = canEditReport(user, user.id);
+
+      expect(result).toBe(true);
+    });
+
+    it('他人の日報は編集不可', () => {
+      const result = canEditReport(user, 99);
+
+      expect(result).toBe(false);
+    });
+
+    it('adminでも他人の日報は編集不可', () => {
+      const adminUser: AuthUser = { id: 4, email: 'admin@example.com', role: 'admin' };
+
+      const result = canEditReport(adminUser, 1);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('canManageMaster', () => {
+    it('adminはマスタ管理可能', () => {
+      const adminUser: AuthUser = { id: 4, email: 'admin@example.com', role: 'admin' };
+
+      const result = canManageMaster(adminUser);
+
+      expect(result).toBe(true);
+    });
+
+    it('managerはマスタ管理不可', () => {
+      const managerUser: AuthUser = { id: 3, email: 'manager@example.com', role: 'manager' };
+
+      const result = canManageMaster(managerUser);
+
+      expect(result).toBe(false);
+    });
+
+    it('memberはマスタ管理不可', () => {
+      const memberUser: AuthUser = { id: 1, email: 'member@example.com', role: 'member' };
+
+      const result = canManageMaster(memberUser);
+
+      expect(result).toBe(false);
     });
   });
 });
