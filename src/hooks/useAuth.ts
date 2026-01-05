@@ -28,7 +28,7 @@ import type { UserRole } from '@/types/auth';
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
 
-  if (context === undefined) {
+  if (context === null) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 

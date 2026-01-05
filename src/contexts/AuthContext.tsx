@@ -60,27 +60,12 @@ export interface AuthContextType {
 }
 
 /**
- * 認証コンテキストのデフォルト値
- */
-const defaultContextValue: AuthContextType = {
-  user: null,
-  isLoading: true,
-  isAuthenticated: false,
-  login: async () => {
-    throw new Error('AuthProvider is not mounted');
-  },
-  logout: async () => {
-    throw new Error('AuthProvider is not mounted');
-  },
-  refreshUser: async () => {
-    throw new Error('AuthProvider is not mounted');
-  },
-};
-
-/**
  * 認証コンテキスト
+ *
+ * デフォルト値をnullにすることで、AuthProviderの外で使用された場合に
+ * useAuthフックがエラーをスローできるようにしている。
  */
-export const AuthContext = createContext<AuthContextType>(defaultContextValue);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * AuthProviderのProps
