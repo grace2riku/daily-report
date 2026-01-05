@@ -96,7 +96,7 @@ describe('JWT ユーティリティ', () => {
       const result = await verifyToken('');
 
       expect(result.valid).toBe(false);
-      expect(result.error).toBe('Token is required');
+      expect(result.error).toBe('トークンが必要です');
     });
 
     it('不正な形式のトークンは検証に失敗する', async () => {
