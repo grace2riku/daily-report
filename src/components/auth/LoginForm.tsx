@@ -12,13 +12,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { loginSchema } from '@/lib/validations/auth';
 
 /**
- * ログインフォームのエラーコード定義
+ * API認証エラーの表示メッセージ定義
+ *
+ * バリデーションエラー（E001/E002）はZodスキーマで定義されているため、
+ * ここではAPI認証エラー（E003/E004）のみを定義する。
  */
-const ERROR_MESSAGES = {
-  E001: 'メールアドレスを入力してください',
-  E002: 'パスワードを入力してください',
-  E003: 'メールアドレスまたはパスワードが正しくありません',
-  E004: 'アカウントが無効化されています',
+const API_ERROR_MESSAGES = {
+  /** メールアドレスまたはパスワードが正しくありません */
+  INVALID_CREDENTIALS: 'メールアドレスまたはパスワードが正しくありません',
+  /** アカウントが無効化されています */
+  ACCOUNT_DISABLED: 'アカウントが無効化されています',
 } as const;
 
 /**
@@ -34,16 +37,16 @@ interface FieldErrors {
  */
 function mapApiErrorToDisplayMessage(errorMessage: string): string {
   if (errorMessage.includes('無効化') || errorMessage.includes('disabled')) {
-    return ERROR_MESSAGES.E004;
+    return API_ERROR_MESSAGES.ACCOUNT_DISABLED;
   }
   if (
     errorMessage.includes('正しくありません') ||
     errorMessage.includes('Invalid') ||
     errorMessage.includes('credentials')
   ) {
-    return ERROR_MESSAGES.E003;
+    return API_ERROR_MESSAGES.INVALID_CREDENTIALS;
   }
-  return ERROR_MESSAGES.E003;
+  return API_ERROR_MESSAGES.INVALID_CREDENTIALS;
 }
 
 /**
