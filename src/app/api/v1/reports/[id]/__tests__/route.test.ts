@@ -11,17 +11,27 @@ import { generateToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/prisma';
 import type { JwtPayload } from '@/types';
 
-import { GET } from '../route';
+import { GET, PUT } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     dailyReport: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
     salesPerson: {
       findUnique: vi.fn(),
     },
+    customer: {
+      findMany: vi.fn(),
+    },
+    visitRecord: {
+      deleteMany: vi.fn(),
+      update: vi.fn(),
+      create: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -729,6 +739,911 @@ describe('GET /api/v1/reports/{id}', () => {
           },
         },
       });
+    });
+  });
+});
+
+/**
+ * PUT /api/v1/reports/{id} APIのテスト
+ */
+
+// 既存日報（訪問記録付き）
+const mockExistingReport = {
+  id: 1,
+  salesPersonId: 1,
+  reportDate: new Date('2025-01-15'),
+  problem: 'A社への提案価格について上長に相談したい。',
+  plan: 'B社へ見積もり提出',
+  status: 'draft',
+  createdAt: new Date('2025-01-15T18:00:00Z'),
+  updatedAt: new Date('2025-01-15T18:00:00Z'),
+  visitRecords: [{ id: 1 }, { id: 2 }],
+};
+
+// 他人の日報
+const mockOtherPersonReport = {
+  id: 2,
+  salesPersonId: 2,
+  reportDate: new Date('2025-01-15'),
+  problem: null,
+  plan: null,
+  status: 'draft',
+  createdAt: new Date('2025-01-15T17:00:00Z'),
+  updatedAt: new Date('2025-01-15T17:00:00Z'),
+  visitRecords: [{ id: 3 }],
+};
+
+// 更新後の日報
+const mockUpdatedReport = {
+  id: 1,
+  salesPersonId: 1,
+  reportDate: new Date('2025-01-15'),
+  problem: '課題を更新しました。',
+  plan: '予定を更新しました。',
+  status: 'submitted',
+  createdAt: new Date('2025-01-15T18:00:00Z'),
+  updatedAt: new Date('2025-01-15T19:00:00Z'),
+  salesPerson: {
+    id: 1,
+    name: 'テスト太郎',
+  },
+  visitRecords: [
+    {
+      id: 1,
+      customerId: 1,
+      visitTime: '10:00',
+      content: '訪問内容を更新しました。',
+      sortOrder: 0,
+      customer: { id: 1, name: '株式会社ABC' },
+    },
+    {
+      id: 4,
+      customerId: 3,
+      visitTime: '16:30',
+      content: '新規訪問先を追加',
+      sortOrder: 1,
+      customer: { id: 3, name: 'GHI株式会社' },
+    },
+  ],
+};
+
+/**
+ * PUT用のリクエストを作成
+ */
+function createPutRequest(token: string | undefined, reportId: string, body: unknown): NextRequest {
+  const url = `http://localhost:3000/api/v1/reports/${reportId}`;
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * PUTハンドラーを呼び出すヘルパー関数
+ */
+async function callPUT(token: string | undefined, reportId: string, body: unknown) {
+  const request = createPutRequest(token, reportId, body);
+  return PUT(request, { params: Promise.resolve({ id: reportId }) });
+}
+
+describe('PUT /api/v1/reports/{id}', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe('認証エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const response = await callPUT(undefined, '1', {
+        problem: '更新テスト',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(data.error.message).toBe('認証が必要です');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const response = await callPUT('invalid-token', '1', {
+        problem: '更新テスト',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('IT-013-01: 正常更新', () => {
+    it('日報を正常に更新できる（200）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      // 既存の日報を返す
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      // 顧客が存在する
+      customerFindManyMock.mockResolvedValueOnce([{ id: 1 }, { id: 3 }] as never);
+
+      // トランザクション結果
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(mockUpdatedReport),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        problem: '課題を更新しました。',
+        plan: '予定を更新しました。',
+        status: 'submitted',
+        visit_records: [
+          {
+            id: 1,
+            customer_id: 1,
+            visit_time: '10:00',
+            content: '訪問内容を更新しました。',
+          },
+          {
+            customer_id: 3,
+            visit_time: '16:30',
+            content: '新規訪問先を追加',
+          },
+        ],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.id).toBe(1);
+      expect(data.data.problem).toBe('課題を更新しました。');
+      expect(data.data.plan).toBe('予定を更新しました。');
+      expect(data.data.status).toBe('submitted');
+      expect(data.data.visit_records).toHaveLength(2);
+    });
+  });
+
+  describe('IT-013-02: 訪問記録追加', () => {
+    it('訪問記録を追加できる（200）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+      customerFindManyMock.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }] as never);
+
+      const reportWithAddedVisit = {
+        ...mockUpdatedReport,
+        visitRecords: [
+          ...mockUpdatedReport.visitRecords,
+          {
+            id: 5,
+            customerId: 2,
+            visitTime: '18:00',
+            content: '追加訪問',
+            sortOrder: 2,
+            customer: { id: 2, name: 'DEF株式会社' },
+          },
+        ],
+      };
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(reportWithAddedVisit),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        visit_records: [
+          { id: 1, customer_id: 1, visit_time: '10:00', content: '既存訪問1' },
+          { id: 2, customer_id: 2, visit_time: '14:00', content: '既存訪問2' },
+          { customer_id: 3, visit_time: '18:00', content: '新規追加訪問' },
+        ],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.visit_records).toHaveLength(3);
+    });
+  });
+
+  describe('IT-013-03: 訪問記録削除', () => {
+    it('リクエストに含まれていない訪問記録は削除される（200）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      // 既存の日報には訪問記録が2件
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+      customerFindManyMock.mockResolvedValueOnce([{ id: 1 }] as never);
+
+      // 更新後は訪問記録が1件（id=2は削除）
+      const reportWithDeletedVisit = {
+        ...mockUpdatedReport,
+        visitRecords: [
+          {
+            id: 1,
+            customerId: 1,
+            visitTime: '10:00',
+            content: '残った訪問',
+            sortOrder: 0,
+            customer: { id: 1, name: '株式会社ABC' },
+          },
+        ],
+      };
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(reportWithDeletedVisit),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      // id=2の訪問記録を含めない -> 削除される
+      const response = await callPUT(token, '1', {
+        visit_records: [{ id: 1, customer_id: 1, visit_time: '10:00', content: '残った訪問' }],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.visit_records).toHaveLength(1);
+      expect(data.data.visit_records[0].id).toBe(1);
+    });
+  });
+
+  describe('IT-013-04: 他人の日報更新（403 FORBIDDEN）', () => {
+    it('他人の日報は更新できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockOtherPersonReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '2', {
+        problem: '他人の日報を更新しようとする',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この日報を編集する権限がありません');
+    });
+
+    it('上長でも部下の日報は更新できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+
+      // 部下の日報
+      findUniqueMock.mockResolvedValueOnce({
+        ...mockExistingReport,
+        salesPersonId: mockMember.id,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockManager.id,
+        email: mockManager.email,
+        role: mockManager.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        problem: '上長が部下の日報を更新しようとする',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+
+    it('管理者でも他人の日報は更新できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: mockAdmin.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        problem: '管理者が他人の日報を更新しようとする',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('IT-013-05: ステータス変更（draft -> submitted）', () => {
+    it('ステータスをdraftからsubmittedに変更できる（200）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const reportWithStatusChange = {
+        ...mockUpdatedReport,
+        status: 'submitted',
+      };
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(reportWithStatusChange),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        status: 'submitted',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.status).toBe('submitted');
+    });
+  });
+
+  describe('追加: 存在しない日報（404）', () => {
+    it('存在しない日報IDの場合は404を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '999', {
+        problem: '存在しない日報を更新しようとする',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('NOT_FOUND');
+      expect(data.error.message).toBe('日報が見つかりません');
+    });
+  });
+
+  describe('追加: IDが不正（422）', () => {
+    it('IDが文字列の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, 'abc', {
+        problem: '更新テスト',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('IDは正の整数で指定してください');
+    });
+
+    it('IDが負の数の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '-1', {
+        problem: '更新テスト',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('IDが0の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '0', {
+        problem: '更新テスト',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('追加: 訪問記録の更新（idが指定されているもの）', () => {
+    it('既存の訪問記録を更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+      customerFindManyMock.mockResolvedValueOnce([{ id: 1 }] as never);
+
+      const updatedVisitReport = {
+        ...mockUpdatedReport,
+        visitRecords: [
+          {
+            id: 1,
+            customerId: 1,
+            visitTime: '11:00',
+            content: '更新された訪問内容',
+            sortOrder: 0,
+            customer: { id: 1, name: '株式会社ABC' },
+          },
+        ],
+      };
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(updatedVisitReport),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        visit_records: [
+          {
+            id: 1,
+            customer_id: 1,
+            visit_time: '11:00',
+            content: '更新された訪問内容',
+          },
+        ],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.visit_records).toHaveLength(1);
+      expect(data.data.visit_records[0].visit_time).toBe('11:00');
+      expect(data.data.visit_records[0].content).toBe('更新された訪問内容');
+    });
+  });
+
+  describe('バリデーションエラー', () => {
+    it('不正な日付フォーマットの場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        report_date: '2025/01/15',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('YYYY-MM-DD');
+    });
+
+    it('不正な訪問時刻フォーマットの場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        visit_records: [{ customer_id: 1, visit_time: '25:00', content: 'テスト訪問' }],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('HH:MM');
+    });
+
+    it('訪問内容が空の場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        visit_records: [{ customer_id: 1, content: '' }],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('訪問内容');
+    });
+
+    it('存在しない顧客IDの場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+      customerFindManyMock.mockResolvedValueOnce([]); // 顧客が存在しない
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        visit_records: [{ customer_id: 999, content: 'テスト訪問' }],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('999');
+    });
+
+    it('無効なステータスの場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        status: 'invalid_status',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('problem/planが2000文字を超える場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const longText = 'あ'.repeat(2001);
+      const response = await callPUT(token, '1', {
+        problem: longText,
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('2000文字');
+    });
+
+    it('リクエストボディが不正なJSONの場合は400を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const url = 'http://localhost:3000/api/v1/reports/1';
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      headers.set('Authorization', `Bearer ${token}`);
+
+      const request = new NextRequest(url, {
+        method: 'PUT',
+        headers,
+        body: 'invalid json',
+      });
+
+      const response = await PUT(request, { params: Promise.resolve({ id: '1' }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('BAD_REQUEST');
+    });
+  });
+
+  describe('レスポンスフォーマット', () => {
+    it('更新成功時のレスポンスが正しいフォーマットで返される', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const customerFindManyMock = vi.mocked(prisma.customer.findMany);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+      customerFindManyMock.mockResolvedValueOnce([{ id: 1 }] as never);
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(mockUpdatedReport),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        problem: '更新テスト',
+        visit_records: [{ id: 1, customer_id: 1, visit_time: '10:00', content: 'テスト訪問' }],
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('success', true);
+      expect(data).toHaveProperty('data');
+
+      // トップレベルフィールドの確認
+      expect(data.data).toHaveProperty('id');
+      expect(data.data).toHaveProperty('report_date');
+      expect(data.data).toHaveProperty('sales_person');
+      expect(data.data.sales_person).toHaveProperty('id');
+      expect(data.data.sales_person).toHaveProperty('name');
+      expect(data.data).toHaveProperty('problem');
+      expect(data.data).toHaveProperty('plan');
+      expect(data.data).toHaveProperty('status');
+      expect(data.data).toHaveProperty('visit_records');
+      expect(data.data).toHaveProperty('created_at');
+      expect(data.data).toHaveProperty('updated_at');
+
+      // 日付フォーマットの確認（YYYY-MM-DD）
+      expect(data.data.report_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      // ISO8601形式の確認
+      expect(data.data.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(data.data.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+
+      // 訪問記録のフォーマット確認
+      if (data.data.visit_records.length > 0) {
+        const visitRecord = data.data.visit_records[0];
+        expect(visitRecord).toHaveProperty('id');
+        expect(visitRecord).toHaveProperty('customer');
+        expect(visitRecord.customer).toHaveProperty('id');
+        expect(visitRecord.customer).toHaveProperty('name');
+        expect(visitRecord).toHaveProperty('visit_time');
+        expect(visitRecord).toHaveProperty('content');
+        expect(visitRecord).toHaveProperty('sort_order');
+      }
+    });
+  });
+
+  describe('部分更新', () => {
+    it('problemのみを更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      const partiallyUpdatedReport = {
+        ...mockUpdatedReport,
+        problem: '新しい課題',
+        plan: mockExistingReport.plan,
+        status: mockExistingReport.status,
+      };
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(partiallyUpdatedReport),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        problem: '新しい課題',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.problem).toBe('新しい課題');
+    });
+
+    it('visit_recordsを指定しない場合、訪問記録は更新されない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const transactionMock = vi.mocked(prisma.$transaction);
+
+      findUniqueMock.mockResolvedValueOnce(mockExistingReport as never);
+
+      transactionMock.mockImplementationOnce(async (callback) => {
+        const mockTx = {
+          dailyReport: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(mockUpdatedReport),
+          },
+          visitRecord: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(mockTx as never);
+      });
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callPUT(token, '1', {
+        status: 'submitted',
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
     });
   });
 });
