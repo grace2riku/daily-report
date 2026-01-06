@@ -7,6 +7,53 @@ import { idParamSchema } from '@/lib/validations/common';
 import { updateDailyReportSchema } from '@/lib/validations/daily-report';
 
 /**
+ * DELETE /api/v1/reports/{id}
+ * 日報を削除する（本人のみ削除可能）
+ * 関連する訪問記録・コメントもCASCADE削除される
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return withAuth(request, async (_req, user: AuthUser): Promise<NextResponse> => {
+    // パスパラメータを取得
+    const params = await context.params;
+    const idParam = params.id;
+
+    // IDのバリデーション
+    const validationResult = idParamSchema.safeParse(idParam);
+    if (!validationResult.success) {
+      return errorResponse('VALIDATION_ERROR', 'IDは正の整数で指定してください');
+    }
+
+    const reportId = validationResult.data;
+
+    // 日報の存在チェック
+    const existingReport = await prisma.dailyReport.findUnique({
+      where: { id: reportId },
+    });
+
+    if (!existingReport) {
+      return errorResponse('NOT_FOUND', '日報が見つかりません');
+    }
+
+    // 本人チェック（本人のみ削除可能）
+    if (!canEditReport(user, existingReport.salesPersonId)) {
+      return errorResponse('FORBIDDEN', 'この日報を削除する権限がありません');
+    }
+
+    // 日報を削除（訪問記録・コメントはCASCADEで自動削除）
+    await prisma.dailyReport.delete({
+      where: { id: reportId },
+    });
+
+    return successResponse({
+      message: '日報を削除しました',
+    });
+  });
+}
+
+/**
  * GET /api/v1/reports/{id}
  * 日報詳細を取得する
  */

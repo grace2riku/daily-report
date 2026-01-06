@@ -11,7 +11,7 @@ import { generateToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/prisma';
 import type { JwtPayload } from '@/types';
 
-import { GET, PUT } from '../route';
+import { GET, PUT, DELETE } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
@@ -19,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     dailyReport: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     salesPerson: {
       findUnique: vi.fn(),
@@ -1644,6 +1645,363 @@ describe('PUT /api/v1/reports/{id}', () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
+    });
+  });
+});
+
+/**
+ * DELETE /api/v1/reports/{id} APIのテスト
+ */
+
+// 削除対象の日報（本人の日報）
+const mockOwnReport = {
+  id: 1,
+  salesPersonId: 1,
+  reportDate: new Date('2025-01-15'),
+  problem: 'A社への提案価格について上長に相談したい。',
+  plan: 'B社へ見積もり提出',
+  status: 'draft',
+  createdAt: new Date('2025-01-15T18:00:00Z'),
+  updatedAt: new Date('2025-01-15T18:00:00Z'),
+};
+
+// 訪問記録・コメント付きの日報
+const mockReportWithRelations = {
+  id: 1,
+  salesPersonId: 1,
+  reportDate: new Date('2025-01-15'),
+  problem: 'A社への提案価格について上長に相談したい。',
+  plan: 'B社へ見積もり提出',
+  status: 'submitted',
+  createdAt: new Date('2025-01-15T18:00:00Z'),
+  updatedAt: new Date('2025-01-15T18:30:00Z'),
+};
+
+// 他人の日報
+const mockOtherUserReport = {
+  id: 2,
+  salesPersonId: 2,
+  reportDate: new Date('2025-01-15'),
+  problem: null,
+  plan: null,
+  status: 'draft',
+  createdAt: new Date('2025-01-15T17:00:00Z'),
+  updatedAt: new Date('2025-01-15T17:00:00Z'),
+};
+
+/**
+ * DELETE用のリクエストを作成
+ */
+function createDeleteRequest(token: string | undefined, reportId: string): NextRequest {
+  const url = `http://localhost:3000/api/v1/reports/${reportId}`;
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'DELETE',
+    headers,
+  });
+}
+
+/**
+ * DELETEハンドラーを呼び出すヘルパー関数
+ */
+async function callDELETE(token: string | undefined, reportId: string) {
+  const request = createDeleteRequest(token, reportId);
+  return DELETE(request, { params: Promise.resolve({ id: reportId }) });
+}
+
+describe('DELETE /api/v1/reports/{id}', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe('認証エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const response = await callDELETE(undefined, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(data.error.message).toBe('認証が必要です');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const response = await callDELETE('invalid-token', '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('IT-014-01: 正常削除', () => {
+    it('本人の日報を削除できる（200）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const deleteMock = vi.mocked(prisma.dailyReport.delete);
+
+      findUniqueMock.mockResolvedValueOnce(mockOwnReport as never);
+      deleteMock.mockResolvedValueOnce(mockOwnReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.message).toBe('日報を削除しました');
+    });
+
+    it('削除時にPrisma.deleteが正しいIDで呼び出される', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const deleteMock = vi.mocked(prisma.dailyReport.delete);
+
+      findUniqueMock.mockResolvedValueOnce(mockOwnReport as never);
+      deleteMock.mockResolvedValueOnce(mockOwnReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      await callDELETE(token, '1');
+
+      expect(deleteMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+    });
+  });
+
+  describe('IT-014-02: 他人の日報削除（403 FORBIDDEN）', () => {
+    it('他人の日報は削除できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockOtherUserReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '2');
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この日報を削除する権限がありません');
+    });
+
+    it('上長でも部下の日報は削除できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+
+      // 部下の日報
+      findUniqueMock.mockResolvedValueOnce({
+        ...mockOwnReport,
+        salesPersonId: mockMember.id,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockManager.id,
+        email: mockManager.email,
+        role: mockManager.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+
+    it('管理者でも他人の日報は削除できない', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(mockOwnReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: mockAdmin.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('IT-014-03: 存在しないID（404 NOT_FOUND）', () => {
+    it('存在しない日報IDの場合は404を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '999');
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('NOT_FOUND');
+      expect(data.error.message).toBe('日報が見つかりません');
+    });
+  });
+
+  describe('IT-014-04: 関連データ削除（訪問記録・コメントあり）', () => {
+    it('訪問記録・コメントがある日報でも正常に削除できる（CASCADEにより自動削除）', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const deleteMock = vi.mocked(prisma.dailyReport.delete);
+
+      // 訪問記録・コメント付きの日報
+      findUniqueMock.mockResolvedValueOnce(mockReportWithRelations as never);
+      deleteMock.mockResolvedValueOnce(mockReportWithRelations as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.message).toBe('日報を削除しました');
+
+      // Prisma.deleteが呼び出されていることを確認
+      // （CASCADE削除はPrismaスキーマで設定済みなので、deleteが呼ばれれば関連データも削除される）
+      expect(deleteMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+    });
+  });
+
+  describe('追加: IDが不正な形式（422）', () => {
+    it('IDが文字列の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, 'abc');
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('IDは正の整数で指定してください');
+    });
+
+    it('IDが負の数の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '-1');
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('IDが0の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '0');
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('IDが小数の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1.5');
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('レスポンスフォーマット', () => {
+    it('削除成功時のレスポンスが正しいフォーマットで返される', async () => {
+      const findUniqueMock = vi.mocked(prisma.dailyReport.findUnique);
+      const deleteMock = vi.mocked(prisma.dailyReport.delete);
+
+      findUniqueMock.mockResolvedValueOnce(mockOwnReport as never);
+      deleteMock.mockResolvedValueOnce(mockOwnReport as never);
+
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: mockMember.role,
+      };
+      const token = await generateToken(payload);
+
+      const response = await callDELETE(token, '1');
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('success', true);
+      expect(data).toHaveProperty('data');
+      expect(data.data).toHaveProperty('message', '日報を削除しました');
     });
   });
 });
