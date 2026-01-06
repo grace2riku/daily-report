@@ -4,8 +4,11 @@ import { z } from 'zod';
  * 共通バリデーションスキーマ
  */
 
-// IDパラメータ（パスパラメータ用）
-export const idParamSchema = z.object({
+// IDパラメータ（パスパラメータ用 - オブジェクト形式）
+export const idParamSchema = z.coerce.number().int().positive('IDは正の整数である必要があります');
+
+// IDパラメータ（パスパラメータ用 - オブジェクト形式）
+export const idParamObjectSchema = z.object({
   id: z.coerce.number().int().positive('IDは正の整数である必要があります'),
 });
 
@@ -70,6 +73,7 @@ export const reportStatusSchema = z.enum(['draft', 'submitted', 'reviewed']);
 
 // 共通の型エクスポート
 export type IdParam = z.infer<typeof idParamSchema>;
+export type IdParamObject = z.infer<typeof idParamObjectSchema>;
 export type ReportIdParam = z.infer<typeof reportIdParamSchema>;
 export type PaginationParams = z.infer<typeof paginationSchema>;
 export type DateRangeParams = z.infer<typeof dateRangeSchema>;
