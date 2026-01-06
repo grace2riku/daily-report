@@ -4,10 +4,10 @@ import { z } from 'zod';
  * 共通バリデーションスキーマ
  */
 
-// IDパラメータ（パスパラメータ用 - オブジェクト形式）
+// IDパラメータ（単一ID用 - 数値型）
 export const idParamSchema = z.coerce.number().int().positive('IDは正の整数である必要があります');
 
-// IDパラメータ（パスパラメータ用 - オブジェクト形式）
+// IDパラメータ（オブジェクト形式）
 export const idParamObjectSchema = z.object({
   id: z.coerce.number().int().positive('IDは正の整数である必要があります'),
 });
