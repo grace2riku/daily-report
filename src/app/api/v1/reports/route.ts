@@ -8,7 +8,7 @@ import {
 } from '@/lib/api/response';
 import { withAuth, type AuthUser } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/prisma';
-import { dailyReportQuerySchema } from '@/lib/validations/daily-report';
+import { dailyReportQuerySchema, createDailyReportSchema } from '@/lib/validations/daily-report';
 
 /**
  * 日付文字列をローカルタイムゾーンのDateオブジェクトに変換
@@ -179,5 +179,184 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }));
 
     return paginatedResponse(responseData, pagination);
+  });
+}
+
+/**
+ * リクエストボディをスキーマ用の形式に変換
+ * snake_case -> camelCase
+ */
+interface CreateReportRequestBody {
+  report_date?: string;
+  problem?: string;
+  plan?: string;
+  status?: string;
+  visit_records?: Array<{
+    customer_id?: number;
+    visit_time?: string;
+    content?: string;
+  }>;
+}
+
+function transformRequestBody(body: CreateReportRequestBody) {
+  return {
+    reportDate: body.report_date,
+    problem: body.problem,
+    plan: body.plan,
+    status: body.status,
+    visitRecords: body.visit_records?.map((record) => ({
+      customerId: record.customer_id,
+      visitTime: record.visit_time,
+      content: record.content,
+    })),
+  };
+}
+
+/**
+ * POST /api/v1/reports
+ * 日報を新規作成する
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  return withAuth(request, async (_req, user: AuthUser): Promise<NextResponse> => {
+    // リクエストボディを取得
+    let body: CreateReportRequestBody;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse('BAD_REQUEST', 'リクエストボディが不正です');
+    }
+
+    // snake_case -> camelCase 変換
+    const transformedBody = transformRequestBody(body);
+
+    // バリデーション
+    const validationResult = createDailyReportSchema.safeParse(transformedBody);
+    if (!validationResult.success) {
+      const issues = validationResult.error.issues;
+      const firstError = issues[0];
+      return errorResponse('VALIDATION_ERROR', firstError?.message || '入力値が不正です');
+    }
+
+    const { reportDate, problem, plan, status, visitRecords } = validationResult.data;
+
+    // 日付をローカルタイムゾーンのDateに変換
+    const reportDateObj = parseLocalDateStart(reportDate);
+
+    // 同一日付の日報が既に存在するかチェック
+    const existingReport = await prisma.dailyReport.findUnique({
+      where: {
+        salesPersonId_reportDate: {
+          salesPersonId: user.id,
+          reportDate: reportDateObj,
+        },
+      },
+    });
+
+    if (existingReport) {
+      return errorResponse('CONFLICT', 'この日付の日報は既に存在します');
+    }
+
+    // 顧客IDの存在確認
+    const customerIds = visitRecords.map((record) => record.customerId);
+    const existingCustomers = await prisma.customer.findMany({
+      where: {
+        id: { in: customerIds },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const existingCustomerIds = new Set(existingCustomers.map((c) => c.id));
+
+    for (const customerId of customerIds) {
+      if (!existingCustomerIds.has(customerId)) {
+        return errorResponse('VALIDATION_ERROR', `顧客ID ${customerId} は存在しないか無効です`);
+      }
+    }
+
+    // トランザクションで日報と訪問記録を同時作成
+    const createdReport = await prisma.$transaction(async (tx) => {
+      // 日報を作成
+      const report = await tx.dailyReport.create({
+        data: {
+          salesPersonId: user.id,
+          reportDate: reportDateObj,
+          problem: problem || null,
+          plan: plan || null,
+          status: status,
+        },
+      });
+
+      // 訪問記録を作成
+      await tx.visitRecord.createMany({
+        data: visitRecords.map((record, index) => ({
+          dailyReportId: report.id,
+          customerId: record.customerId,
+          visitTime: record.visitTime || null,
+          content: record.content,
+          sortOrder: index,
+        })),
+      });
+
+      // 作成した日報を訪問記録と営業担当者情報を含めて取得
+      return tx.dailyReport.findUnique({
+        where: { id: report.id },
+        include: {
+          salesPerson: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          visitRecords: {
+            include: {
+              customer: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    });
+
+    if (!createdReport) {
+      return errorResponse('INTERNAL_ERROR', '日報の作成に失敗しました');
+    }
+
+    // レスポンスデータを構築
+    const responseData = {
+      id: createdReport.id,
+      report_date: createdReport.reportDate.toISOString().split('T')[0],
+      sales_person: {
+        id: createdReport.salesPerson.id,
+        name: createdReport.salesPerson.name,
+      },
+      problem: createdReport.problem,
+      plan: createdReport.plan,
+      status: createdReport.status,
+      visit_records: createdReport.visitRecords.map((record) => ({
+        id: record.id,
+        customer: {
+          id: record.customer.id,
+          name: record.customer.name,
+        },
+        visit_time: record.visitTime,
+        content: record.content,
+        sort_order: record.sortOrder,
+      })),
+      created_at: createdReport.createdAt.toISOString(),
+      updated_at: createdReport.updatedAt.toISOString(),
+    };
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: responseData,
+      },
+      { status: 201 }
+    );
   });
 }
