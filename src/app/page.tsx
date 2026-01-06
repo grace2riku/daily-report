@@ -11,6 +11,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { Button } from '@/components/ui/button';
 import { useRequireAuth } from '@/hooks/useAuth';
 import { useReportList, type ReportListParams } from '@/hooks/useReport';
+import { useSalesPersons } from '@/hooks/useSalesPersons';
 import { formatDateISO, getFirstDayOfMonth } from '@/lib/utils/date';
 
 /**
@@ -25,6 +26,7 @@ import { formatDateISO, getFirstDayOfMonth } from '@/lib/utils/date';
 export default function Dashboard() {
   const auth = useRequireAuth();
   const { reports, pagination, isLoading: isReportsLoading, error, fetchReports } = useReportList();
+  const { salesPersons, fetchSalesPersons } = useSalesPersons();
 
   // 検索フォームの値
   const [searchValues, setSearchValues] = useState<SearchFormValues>(() => ({
@@ -92,6 +94,13 @@ export default function Dashboard() {
     }
   }, [auth.isLoading, auth.isAuthenticated, buildSearchParams, fetchReports]);
 
+  // 上長・管理者の場合は営業担当者一覧を取得
+  useEffect(() => {
+    if (auth.isAuthenticated && (auth.user?.role === 'manager' || auth.user?.role === 'admin')) {
+      fetchSalesPersons();
+    }
+  }, [auth.isAuthenticated, auth.user?.role, fetchSalesPersons]);
+
   // 認証ローディング中
   if (auth.isLoading) {
     return <LoadingPage />;
@@ -120,6 +129,7 @@ export default function Dashboard() {
           values={searchValues}
           onChange={setSearchValues}
           onSearch={handleSearch}
+          salesPersons={salesPersons}
           currentUserId={auth.user?.id}
           currentUserRole={auth.user?.role}
           isLoading={isReportsLoading}

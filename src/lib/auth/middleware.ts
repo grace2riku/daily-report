@@ -10,6 +10,7 @@ import { errorResponse } from '@/lib/api/response';
 import { prisma } from '@/lib/prisma';
 import type { UserRole } from '@/types';
 
+import { AUTH_COOKIE_CONFIG } from './cookie';
 import { verifyToken, extractTokenFromHeader } from './jwt';
 
 /**
@@ -55,7 +56,13 @@ export async function withAuth<T>(
 ): Promise<NextResponse<T> | NextResponse> {
   // Authorizationヘッダーからトークンを抽出
   const authHeader = request.headers.get('Authorization');
-  const token = extractTokenFromHeader(authHeader);
+  let token = extractTokenFromHeader(authHeader);
+
+  // Authorizationヘッダーにない場合はCookieから取得
+  if (!token) {
+    const cookieToken = request.cookies.get(AUTH_COOKIE_CONFIG.name);
+    token = cookieToken?.value ?? null;
+  }
 
   if (!token) {
     return errorResponse('UNAUTHORIZED', '認証が必要です');
@@ -107,7 +114,13 @@ export async function withRole<T>(
 ): Promise<NextResponse<T> | NextResponse> {
   // Authorizationヘッダーからトークンを抽出
   const authHeader = request.headers.get('Authorization');
-  const token = extractTokenFromHeader(authHeader);
+  let token = extractTokenFromHeader(authHeader);
+
+  // Authorizationヘッダーにない場合はCookieから取得
+  if (!token) {
+    const cookieToken = request.cookies.get(AUTH_COOKIE_CONFIG.name);
+    token = cookieToken?.value ?? null;
+  }
 
   if (!token) {
     return errorResponse('UNAUTHORIZED', '認証が必要です');
