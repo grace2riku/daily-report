@@ -1,0 +1,1 @@
+Issue$ARGUMENTS を最適なサブエージェントを選択して、Git Worktreeを使って実装してください。
