@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/sales-persons APIのテスト
+ * GET/POST /api/v1/sales-persons APIのテスト
  *
  * @vitest-environment node
  */
@@ -11,7 +11,7 @@ import { generateToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/prisma';
 import type { JwtPayload } from '@/types';
 
-import { GET } from '../route';
+import { GET, POST } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
@@ -19,8 +19,15 @@ vi.mock('@/lib/prisma', () => ({
     salesPerson: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
     },
   },
+}));
+
+// パスワードハッシュ関数のモック
+vi.mock('@/lib/utils/password', () => ({
+  hashPassword: vi.fn().mockResolvedValue('hashed_password_mock'),
 }));
 
 const TEST_SECRET = 'test-secret-key-for-testing-only-32-chars';
@@ -619,6 +626,510 @@ describe('GET /api/v1/sales-persons', () => {
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);
       expect(data.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+});
+
+/**
+ * POST /api/v1/sales-persons のテスト用リクエストを作成
+ */
+function createPostRequest(token: string | undefined, body: Record<string, unknown>): NextRequest {
+  const url = new URL('http://localhost:3000/api/v1/sales-persons');
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+describe('POST /api/v1/sales-persons', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // 有効なリクエストボディ
+  const validRequestBody = {
+    employee_code: 'EMP100',
+    name: '新規太郎',
+    email: 'new@example.com',
+    password: 'password123',
+    role: 'member',
+    manager_id: 3,
+    is_active: true,
+  };
+
+  describe('認証・認可エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const request = createPostRequest(undefined, validRequestBody);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const request = createPostRequest('invalid-token', validRequestBody);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('IT-030-02: 一般営業が登録しようとすると403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: 'member',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+
+    it('上長が登録しようとすると403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockManager.id,
+        email: mockManager.email,
+        role: 'manager',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('正常系', () => {
+    it('IT-030-01: 管理者が正常に登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const createMock = vi.mocked(prisma.salesPerson.create);
+
+      // 重複チェック: 社員番号なし、メールなし、上長あり
+      findUniqueMock
+        .mockResolvedValueOnce(null) // 社員番号重複なし
+        .mockResolvedValueOnce(null) // メール重複なし
+        .mockResolvedValueOnce({ id: 3 } as never); // 上長存在
+
+      const createdPerson = {
+        id: 100,
+        employeeCode: 'EMP100',
+        name: '新規太郎',
+        email: 'new@example.com',
+        role: 'member',
+        isActive: true,
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+        manager: {
+          id: 3,
+          name: 'テスト課長',
+        },
+      };
+      createMock.mockResolvedValueOnce(createdPerson as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toMatchObject({
+        id: 100,
+        employee_code: 'EMP100',
+        name: '新規太郎',
+        email: 'new@example.com',
+        role: 'member',
+        is_active: true,
+        manager: {
+          id: 3,
+          name: 'テスト課長',
+        },
+      });
+      expect(data.data.created_at).toBe('2025-01-15T10:00:00.000Z');
+    });
+
+    it('上長なしで登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const createMock = vi.mocked(prisma.salesPerson.create);
+
+      // 重複チェック: 社員番号なし、メールなし
+      findUniqueMock
+        .mockResolvedValueOnce(null) // 社員番号重複なし
+        .mockResolvedValueOnce(null); // メール重複なし
+
+      const createdPerson = {
+        id: 101,
+        employeeCode: 'EMP101',
+        name: '上長なし太郎',
+        email: 'nomanager@example.com',
+        role: 'admin',
+        isActive: true,
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+        manager: null,
+      };
+      createMock.mockResolvedValueOnce(createdPerson as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        employee_code: 'EMP101',
+        name: '上長なし太郎',
+        email: 'nomanager@example.com',
+        password: 'password123',
+        role: 'admin',
+        manager_id: null,
+        is_active: true,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.manager).toBeNull();
+    });
+
+    it('デフォルト値が適用される（role=member, is_active=true）', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const createMock = vi.mocked(prisma.salesPerson.create);
+
+      findUniqueMock.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+      const createdPerson = {
+        id: 102,
+        employeeCode: 'EMP102',
+        name: 'デフォルト太郎',
+        email: 'default@example.com',
+        role: 'member',
+        isActive: true,
+        createdAt: new Date('2025-01-15T10:00:00Z'),
+        manager: null,
+      };
+      createMock.mockResolvedValueOnce(createdPerson as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      // role と is_active を省略
+      const request = createPostRequest(token, {
+        employee_code: 'EMP102',
+        name: 'デフォルト太郎',
+        email: 'default@example.com',
+        password: 'password123',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.role).toBe('member');
+      expect(data.data.is_active).toBe(true);
+    });
+  });
+
+  describe('重複エラー', () => {
+    it('IT-030-03: 社員番号が重複している場合は409を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+
+      // 社員番号が既に存在
+      findUniqueMock.mockResolvedValueOnce({ id: 999 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('DUPLICATE_EMPLOYEE_CODE');
+      expect(data.error.message).toBe('この社員番号は既に使用されています');
+    });
+
+    it('IT-030-04: メールアドレスが重複している場合は409を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+
+      // 社員番号は重複なし、メールが既に存在
+      findUniqueMock
+        .mockResolvedValueOnce(null) // 社員番号なし
+        .mockResolvedValueOnce({ id: 999 } as never); // メール重複あり
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('DUPLICATE_EMAIL');
+      expect(data.error.message).toBe('このメールアドレスは既に使用されています');
+    });
+  });
+
+  describe('バリデーションエラー', () => {
+    it('IT-030-05: パスワードが8文字未満の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        password: 'short', // 5文字
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('8文字以上');
+    });
+
+    it('社員番号が未入力の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        employee_code: '',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('氏名が未入力の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        name: '',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('メールアドレスが不正形式の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        email: 'invalid-email',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('社員番号に半角英数字以外が含まれる場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        employee_code: 'EMP-001', // ハイフンを含む
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('不正なroleの場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        role: 'invalid_role',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('指定された上長が存在しない場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+
+      // 社員番号なし、メールなし、上長なし
+      findUniqueMock
+        .mockResolvedValueOnce(null) // 社員番号重複なし
+        .mockResolvedValueOnce(null) // メール重複なし
+        .mockResolvedValueOnce(null); // 上長が存在しない
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        ...validRequestBody,
+        manager_id: 9999, // 存在しない上長ID
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('指定された上長が存在しません');
+    });
+  });
+
+  describe('エラーハンドリング', () => {
+    it('データベースエラーの場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const createMock = vi.mocked(prisma.salesPerson.create);
+
+      findUniqueMock
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 3 } as never);
+
+      createMock.mockRejectedValueOnce(new Error('Database connection error'));
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, validRequestBody);
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('営業担当者の登録に失敗しました');
     });
   });
 });
