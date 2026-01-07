@@ -198,17 +198,11 @@ export default function ReportDetailPage() {
           isDeleting={commentLoading}
         />
 
-        {/* コメント削除エラー */}
-        {commentError && !canComment && <ErrorMessage message={commentError} className="mt-4" />}
+        {/* コメント操作エラー（投稿・削除共通） */}
+        {commentError && <ErrorMessage message={commentError} className="mt-4" />}
 
         {/* コメント投稿フォーム（上長・管理者のみ） */}
-        {canComment && (
-          <CommentForm
-            onSubmit={handleCommentSubmit}
-            isLoading={commentLoading}
-            error={commentError}
-          />
-        )}
+        {canComment && <CommentForm onSubmit={handleCommentSubmit} isLoading={commentLoading} />}
       </div>
     </PageContainer>
   );

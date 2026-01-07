@@ -12,7 +12,6 @@ import { Textarea } from '@/components/ui/textarea';
 interface CommentFormProps {
   onSubmit: (content: string) => Promise<void>;
   isLoading: boolean;
-  error: string | null;
 }
 
 /**
@@ -20,7 +19,7 @@ interface CommentFormProps {
  *
  * 上長・管理者のみに表示されるコメント投稿フォーム
  */
-export function CommentForm({ onSubmit, isLoading, error }: CommentFormProps) {
+export function CommentForm({ onSubmit, isLoading }: CommentFormProps) {
   const [content, setContent] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -48,8 +47,6 @@ export function CommentForm({ onSubmit, isLoading, error }: CommentFormProps) {
     }
   };
 
-  const displayError = validationError || error;
-
   return (
     <Card>
       <CardHeader>
@@ -68,14 +65,14 @@ export function CommentForm({ onSubmit, isLoading, error }: CommentFormProps) {
               rows={3}
               disabled={isLoading}
               aria-label="コメント内容"
-              aria-invalid={!!displayError}
+              aria-invalid={!!validationError}
             />
             <p className="mt-1 text-xs text-muted-foreground text-right">
               {content.length} / 1000文字
             </p>
           </div>
 
-          {displayError && <ErrorMessage message={displayError} />}
+          {validationError && <ErrorMessage message={validationError} />}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={isLoading || !content.trim()}>
