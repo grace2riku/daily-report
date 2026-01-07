@@ -1,14 +1,83 @@
 /**
  * コメントAPI
  *
+ * GET /api/v1/reports/[id]/comments - コメント一覧取得
  * POST /api/v1/reports/[id]/comments - コメント投稿
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { successResponse, errorResponse } from '@/lib/api/response';
-import { withAuth, type AuthUser } from '@/lib/auth/middleware';
+import { withAuth, canViewReport, type AuthUser } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/prisma';
+import { idParamSchema } from '@/lib/validations/common';
+
+/**
+ * GET /api/v1/reports/[id]/comments
+ * 日報に紐づくコメント一覧を取得する
+ */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return withAuth(request, async (_req, user: AuthUser): Promise<NextResponse> => {
+    // パスパラメータを取得
+    const params = await context.params;
+    const idParam = params.id;
+
+    // IDのバリデーション
+    const validationResult = idParamSchema.safeParse(idParam);
+    if (!validationResult.success) {
+      return errorResponse('VALIDATION_ERROR', 'IDは正の整数で指定してください');
+    }
+
+    const reportId = validationResult.data;
+
+    // 日報の存在チェック
+    const report = await prisma.dailyReport.findUnique({
+      where: { id: reportId },
+      select: { id: true, salesPersonId: true },
+    });
+
+    if (!report) {
+      return errorResponse('NOT_FOUND', '日報が見つかりません');
+    }
+
+    // 権限チェック（日報の閲覧権限があるかどうか）
+    const hasAccess = await canViewReport(user, report.salesPersonId);
+    if (!hasAccess) {
+      return errorResponse('FORBIDDEN', 'この日報を閲覧する権限がありません');
+    }
+
+    // コメント一覧を取得（作成日時昇順）
+    const comments = await prisma.comment.findMany({
+      where: { dailyReportId: reportId },
+      include: {
+        commenter: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // レスポンスデータを構築
+    const responseData = comments.map((comment) => ({
+      id: comment.id,
+      commenter: {
+        id: comment.commenter.id,
+        name: comment.commenter.name,
+      },
+      content: comment.content,
+      created_at: comment.createdAt.toISOString(),
+      updated_at: comment.updatedAt.toISOString(),
+    }));
+
+    return successResponse(responseData);
+  });
+}
 
 /**
  * POST /api/v1/reports/[id]/comments
