@@ -21,6 +21,14 @@ vi.mock('@/lib/auth/jwt', () => ({
 const mockClearAuthCookie = vi.fn();
 vi.mock('@/lib/auth/cookie', () => ({
   clearAuthCookie: () => mockClearAuthCookie(),
+  AUTH_COOKIE_CONFIG: {
+    name: 'auth_token',
+    maxAge: 3600,
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+  },
 }));
 
 // Prismaのモック（middleware内で使用される可能性があるため）
