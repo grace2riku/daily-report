@@ -7,6 +7,9 @@ export * from './auth';
 // 日報スキーマ
 export * from './daily-report';
 
+// 日報フォームスキーマ（フロントエンド用）
+export * from './report-form';
+
 // コメントスキーマ
 export * from './comment';
 
