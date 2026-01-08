@@ -19,3 +19,4 @@ export {
   type UseReportDetailReturn,
   type UseReportMutationReturn,
 } from './useReport';
+export { useSalesPersonsAdmin } from './useSalesPersonsAdmin';

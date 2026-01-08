@@ -159,6 +159,16 @@ export async function PUT(
 
       const salesPersonId = idValidationResult.data;
 
+      // 営業担当者の存在確認
+      const existingSalesPerson = await prisma.salesPerson.findUnique({
+        where: { id: salesPersonId },
+        select: { id: true, email: true },
+      });
+
+      if (!existingSalesPerson) {
+        return errorResponse('NOT_FOUND', '営業担当者が見つかりません');
+      }
+
       // リクエストボディを取得
       const body = await request.json();
 
@@ -182,27 +192,14 @@ export async function PUT(
 
       const { name, email, password, role, managerId, isActive } = validationResult.data;
 
-      // 営業担当者の存在確認
-      const existingSalesPerson = await prisma.salesPerson.findUnique({
-        where: { id: salesPersonId },
-        select: { id: true },
-      });
-
-      if (!existingSalesPerson) {
-        return errorResponse('NOT_FOUND', '営業担当者が見つかりません');
-      }
-
-      // メールアドレスの重複チェック（自分自身を除く）
-      if (email !== undefined) {
-        const existingEmail = await prisma.salesPerson.findFirst({
-          where: {
-            email,
-            id: { not: salesPersonId },
-          },
+      // メールアドレスの重複チェック（自分以外）
+      if (email && email !== existingSalesPerson.email) {
+        const duplicateEmail = await prisma.salesPerson.findUnique({
+          where: { email },
           select: { id: true },
         });
 
-        if (existingEmail) {
+        if (duplicateEmail) {
           return errorResponse('DUPLICATE_EMAIL', 'このメールアドレスは既に使用されています');
         }
       }
@@ -234,27 +231,19 @@ export async function PUT(
         isActive?: boolean;
       } = {};
 
-      if (name !== undefined) {
-        updateData.name = name;
-      }
-      if (email !== undefined) {
-        updateData.email = email;
-      }
-      if (password !== undefined && password !== '') {
+      if (name !== undefined) updateData.name = name;
+      if (email !== undefined) updateData.email = email;
+      if (role !== undefined) updateData.role = role;
+      if (managerId !== undefined) updateData.managerId = managerId;
+      if (isActive !== undefined) updateData.isActive = isActive;
+
+      // パスワードが指定されている場合のみハッシュ化して更新
+      if (password && password.length > 0) {
         updateData.passwordHash = await hashPassword(password);
-      }
-      if (role !== undefined) {
-        updateData.role = role;
-      }
-      if (managerId !== undefined) {
-        updateData.managerId = managerId;
-      }
-      if (isActive !== undefined) {
-        updateData.isActive = isActive;
       }
 
       // 営業担当者を更新
-      const salesPerson = await prisma.salesPerson.update({
+      const updatedSalesPerson = await prisma.salesPerson.update({
         where: { id: salesPersonId },
         data: updateData,
         select: {
@@ -277,20 +266,20 @@ export async function PUT(
 
       // レスポンス形式に変換（snake_case）
       const responseData = {
-        id: salesPerson.id,
-        employee_code: salesPerson.employeeCode,
-        name: salesPerson.name,
-        email: salesPerson.email,
-        role: salesPerson.role,
-        manager: salesPerson.manager
+        id: updatedSalesPerson.id,
+        employee_code: updatedSalesPerson.employeeCode,
+        name: updatedSalesPerson.name,
+        email: updatedSalesPerson.email,
+        role: updatedSalesPerson.role,
+        manager: updatedSalesPerson.manager
           ? {
-              id: salesPerson.manager.id,
-              name: salesPerson.manager.name,
+              id: updatedSalesPerson.manager.id,
+              name: updatedSalesPerson.manager.name,
             }
           : null,
-        is_active: salesPerson.isActive,
-        created_at: salesPerson.createdAt.toISOString(),
-        updated_at: salesPerson.updatedAt.toISOString(),
+        is_active: updatedSalesPerson.isActive,
+        created_at: updatedSalesPerson.createdAt.toISOString(),
+        updated_at: updatedSalesPerson.updatedAt.toISOString(),
       };
 
       return successResponse(responseData);
@@ -304,7 +293,7 @@ export async function PUT(
 /**
  * DELETE /api/v1/sales-persons/{id}
  *
- * 営業担当者を削除する（論理削除）。
+ * 営業担当者を削除する（論理削除: is_active = false）。
  * 管理者のみ実行可能。
  *
  * パスパラメータ:
@@ -328,12 +317,12 @@ export async function DELETE(
       const idParam = params.id;
 
       // IDのバリデーション
-      const validationResult = idParamSchema.safeParse(idParam);
-      if (!validationResult.success) {
+      const idValidationResult = idParamSchema.safeParse(idParam);
+      if (!idValidationResult.success) {
         return errorResponse('VALIDATION_ERROR', 'IDは正の整数で指定してください');
       }
 
-      const salesPersonId = validationResult.data;
+      const salesPersonId = idValidationResult.data;
 
       // 営業担当者の存在確認
       const existingSalesPerson = await prisma.salesPerson.findUnique({
@@ -345,15 +334,18 @@ export async function DELETE(
         return errorResponse('NOT_FOUND', '営業担当者が見つかりません');
       }
 
+      // 既に無効化されている場合
+      if (!existingSalesPerson.isActive) {
+        return errorResponse('VALIDATION_ERROR', 'この営業担当者は既に無効化されています');
+      }
+
       // 論理削除（is_active を false に更新）
       await prisma.salesPerson.update({
         where: { id: salesPersonId },
         data: { isActive: false },
       });
 
-      return successResponse({
-        message: '営業担当者を削除しました',
-      });
+      return successResponse({ message: '営業担当者を削除しました' });
     } catch (error) {
       console.error('Sales person delete error:', error);
       return errorResponse('INTERNAL_ERROR', '営業担当者の削除に失敗しました');
