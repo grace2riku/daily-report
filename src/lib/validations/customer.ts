@@ -32,8 +32,17 @@ export const createCustomerSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-// 顧客更新リクエストのスキーマ
-export const updateCustomerSchema = createCustomerSchema.partial().omit({ customerCode: true });
+// 顧客更新リクエストのスキーマ（デフォルト値なし）
+export const updateCustomerSchema = z.object({
+  name: z
+    .string()
+    .min(1, '顧客名を入力してください')
+    .max(200, '顧客名は200文字以内で入力してください')
+    .optional(),
+  address: z.string().max(500, '住所は500文字以内で入力してください').optional().or(z.literal('')),
+  phone: phoneSchema,
+  isActive: z.boolean().optional(),
+});
 
 // 顧客検索クエリのスキーマ
 export const customerQuerySchema = z
