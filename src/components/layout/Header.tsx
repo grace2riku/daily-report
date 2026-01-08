@@ -67,7 +67,7 @@ export function Header({ userName, userRole, onLogout }: HeaderProps) {
             <div className="hidden md:flex items-center gap-4">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="gap-2">
+                  <Button variant="ghost" className="gap-2" data-testid="user-menu">
                     <User className="h-4 w-4" />
                     {userName}
                     <ChevronDown className="h-4 w-4" />
@@ -84,7 +84,7 @@ export function Header({ userName, userRole, onLogout }: HeaderProps) {
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onLogout}>
+                  <DropdownMenuItem onClick={onLogout} data-testid="logout-button">
                     <LogOut className="mr-2 h-4 w-4" />
                     ログアウト
                   </DropdownMenuItem>
