@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/customers/{id} APIのテスト
+ * GET/PUT /api/v1/customers/{id} APIのテスト
  *
  * @vitest-environment node
  */
@@ -11,13 +11,14 @@ import { generateToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/prisma';
 import type { JwtPayload } from '@/types';
 
-import { GET } from '../route';
+import { GET, PUT } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     customer: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
   },
 }));
@@ -29,6 +30,12 @@ const mockMember = {
   id: 1,
   email: 'member@example.com',
   role: 'member' as const,
+};
+
+const mockManager = {
+  id: 3,
+  email: 'manager@example.com',
+  role: 'manager' as const,
 };
 
 const mockAdmin = {
@@ -569,6 +576,763 @@ describe('GET /api/v1/customers/{id}', () => {
       expect(findUniqueMock).toHaveBeenCalledWith({
         where: { id: 123 },
         select: expect.any(Object),
+      });
+    });
+  });
+});
+
+/**
+ * テスト用のPUTリクエストを作成
+ */
+function createPutRequest(id: string, body: Record<string, unknown>, token?: string): NextRequest {
+  const url = new URL(`http://localhost:3000/api/v1/customers/${id}`);
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+describe('PUT /api/v1/customers/{id}', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe('認証エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const request = createPutRequest('1', { name: '更新名' });
+      const context = createContext('1');
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(data.error.message).toBe('認証が必要です');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const request = createPutRequest('1', { name: '更新名' }, 'invalid-token');
+      const context = createContext('1');
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('認可エラー', () => {
+    it('一般営業（member）の場合は403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: 'member',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この操作を行う権限がありません');
+    });
+
+    it('上長（manager）の場合は403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockManager.id,
+        email: mockManager.email,
+        role: 'manager',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この操作を行う権限がありません');
+    });
+  });
+
+  describe('バリデーションエラー - パスパラメータ', () => {
+    it('IDが数値でない場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('abc', { name: '更新名' }, token);
+      const context = createContext('abc');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('IDは正の整数で指定してください');
+    });
+
+    it('IDが0の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('0', { name: '更新名' }, token);
+      const context = createContext('0');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('IDが負の数の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('-1', { name: '更新名' }, token);
+      const context = createContext('-1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('NOT_FOUNDエラー', () => {
+    it('存在しないIDの場合は404を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('9999', { name: '更新名' }, token);
+      const context = createContext('9999');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('NOT_FOUND');
+      expect(data.error.message).toBe('顧客が見つかりません');
+    });
+  });
+
+  describe('バリデーションエラー - リクエストボディ', () => {
+    it('nameが空文字の場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('nameが200文字を超える場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const longName = 'a'.repeat(201);
+      const request = createPutRequest('1', { name: longName }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('顧客名は200文字以内で入力してください');
+    });
+
+    it('addressが500文字を超える場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const longAddress = 'a'.repeat(501);
+      const request = createPutRequest('1', { address: longAddress }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('住所は500文字以内で入力してください');
+    });
+
+    it('phoneが無効な形式の場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { phone: 'invalid-phone' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('有効な電話番号を入力してください');
+    });
+
+    it('phoneが20文字を超える場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const longPhone = '0'.repeat(21);
+      const request = createPutRequest('1', { phone: longPhone }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('電話番号は20文字以内で入力してください');
+    });
+
+    it('is_activeがbooleanでない場合は422を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { is_active: 'invalid' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('正常系', () => {
+    const updatedCustomer = {
+      id: 1,
+      customerCode: 'C001',
+      name: '更新された顧客名',
+      address: '東京都新宿区1-1-1',
+      phone: '03-9999-8888',
+      isActive: true,
+      createdAt: new Date('2025-01-01T00:00:00Z'),
+      updatedAt: new Date('2025-01-15T00:00:00Z'),
+    };
+
+    it('nameのみ更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        name: '新しい顧客名',
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '新しい顧客名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.name).toBe('新しい顧客名');
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ name: '新しい顧客名' }),
+        })
+      );
+    });
+
+    it('addressを更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        address: '新しい住所',
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { address: '新しい住所' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.address).toBe('新しい住所');
+    });
+
+    it('addressを空文字でクリアできる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        address: null,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { address: '' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.address).toBeNull();
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ address: null }),
+        })
+      );
+    });
+
+    it('phoneを更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        phone: '06-1234-5678',
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { phone: '06-1234-5678' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.phone).toBe('06-1234-5678');
+    });
+
+    it('phoneを空文字でクリアできる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        phone: null,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { phone: '' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.phone).toBeNull();
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ phone: null }),
+        })
+      );
+    });
+
+    it('is_activeをfalseに更新できる（無効化）', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...updatedCustomer,
+        isActive: false,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { is_active: false }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.is_active).toBe(false);
+    });
+
+    it('is_activeをtrueに更新できる（有効化）', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 2 } as never);
+      updateMock.mockResolvedValueOnce({
+        ...mockInactiveCustomer,
+        isActive: true,
+        updatedAt: new Date('2025-01-15T00:00:00Z'),
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('2', { is_active: true }, token);
+      const context = createContext('2');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.is_active).toBe(true);
+    });
+
+    it('複数項目を同時に更新できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: '新しい顧客名',
+        address: '新しい住所',
+        phone: '06-9999-8888',
+        isActive: false,
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-15T00:00:00Z'),
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest(
+        '1',
+        {
+          name: '新しい顧客名',
+          address: '新しい住所',
+          phone: '06-9999-8888',
+          is_active: false,
+        },
+        token
+      );
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.name).toBe('新しい顧客名');
+      expect(data.data.address).toBe('新しい住所');
+      expect(data.data.phone).toBe('06-9999-8888');
+      expect(data.data.is_active).toBe(false);
+    });
+
+    it('レスポンスがsnake_case形式で返される', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce(updatedCustomer as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toHaveProperty('customer_code');
+      expect(data.data).toHaveProperty('is_active');
+      expect(data.data).toHaveProperty('created_at');
+      expect(data.data).toHaveProperty('updated_at');
+      expect(data.data).not.toHaveProperty('customerCode');
+      expect(data.data).not.toHaveProperty('isActive');
+      expect(data.data).not.toHaveProperty('createdAt');
+      expect(data.data).not.toHaveProperty('updatedAt');
+    });
+
+    it('空のリクエストボディでも更新が実行される', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce(mockCustomer as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', {}, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: {},
+        })
+      );
+    });
+  });
+
+  describe('エラーハンドリング', () => {
+    it('データベースエラー（findUnique）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockRejectedValueOnce(new Error('Database connection error'));
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('顧客の更新に失敗しました');
+    });
+
+    it('データベースエラー（update）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockRejectedValueOnce(new Error('Database update error'));
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      const response = await PUT(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('顧客の更新に失敗しました');
+    });
+  });
+
+  describe('Prismaクエリの検証', () => {
+    it('正しいパラメータでfindUniqueが呼ばれる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce(mockCustomer as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest('1', { name: '更新名' }, token);
+      const context = createContext('1');
+
+      await PUT(request, context);
+
+      expect(findUniqueMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { id: true },
+      });
+    });
+
+    it('正しいパラメータでupdateが呼ばれる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const updateMock = vi.mocked(prisma.customer.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
+      updateMock.mockResolvedValueOnce(mockCustomer as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPutRequest(
+        '1',
+        { name: '更新名', address: '新住所', phone: '03-1111-2222', is_active: false },
+        token
+      );
+      const context = createContext('1');
+
+      await PUT(request, context);
+
+      expect(updateMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: {
+          name: '更新名',
+          address: '新住所',
+          phone: '03-1111-2222',
+          isActive: false,
+        },
+        select: {
+          id: true,
+          customerCode: true,
+          name: true,
+          address: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     });
   });
