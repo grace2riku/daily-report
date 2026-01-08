@@ -2,8 +2,8 @@
  * 営業担当者詳細API
  *
  * GET /api/v1/sales-persons/{id} - 営業担当者詳細を取得
- * PUT /api/v1/sales-persons/{id} - 営業担当者を更新
- * DELETE /api/v1/sales-persons/{id} - 営業担当者を削除（論理削除）
+ * PUT /api/v1/sales-persons/{id} - 営業担当者情報を更新（管理者のみ）
+ * DELETE /api/v1/sales-persons/{id} - 営業担当者を削除（論理削除）（管理者のみ）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -127,11 +127,19 @@ export async function GET(
  *
  * リクエストボディ（snake_case）:
  * - name: string - 氏名（任意）
- * - email: string - メールアドレス（任意）
- * - password: string - パスワード（任意、空文字の場合は変更しない）
- * - role: string - 役職（任意）
+ * - email: string - メールアドレス（任意、一意）
+ * - password: string - パスワード（任意、省略時は変更しない）
+ * - role: string - 役職（member/manager/admin、任意）
  * - manager_id: number | null - 上長ID（任意）
  * - is_active: boolean - 有効フラグ（任意）
+ *
+ * レスポンス:
+ * - 200: 更新後の営業担当者情報
+ * - 401: 認証エラー
+ * - 403: 権限エラー（管理者以外）
+ * - 404: 営業担当者が存在しない
+ * - 409: メールアドレス重複
+ * - 422: バリデーションエラー
  */
 export async function PUT(
   request: NextRequest,
@@ -290,6 +298,13 @@ export async function PUT(
  *
  * パスパラメータ:
  * - id: integer - 営業担当者ID
+ *
+ * レスポンス:
+ * - 200: 削除成功メッセージ
+ * - 401: 認証エラー
+ * - 403: 権限エラー（管理者以外）
+ * - 404: 営業担当者が存在しない
+ * - 422: バリデーションエラー
  */
 export async function DELETE(
   request: NextRequest,
