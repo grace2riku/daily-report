@@ -34,12 +34,20 @@ export const createSalesPersonSchema = z.object({
 });
 
 // 営業担当者更新リクエストのスキーマ
-export const updateSalesPersonSchema = createSalesPersonSchema
-  .partial()
-  .omit({ employeeCode: true })
-  .extend({
-    password: passwordSchema.optional().or(z.literal('')),
-  });
+// partial() を使わず、明示的にすべてのフィールドをoptionalに定義
+// これにより default() の影響を受けず、undefinedのまま保持できる
+export const updateSalesPersonSchema = z.object({
+  name: z
+    .string()
+    .min(1, '氏名を入力してください')
+    .max(100, '氏名は100文字以内で入力してください')
+    .optional(),
+  email: emailSchema.optional(),
+  password: passwordSchema.optional().or(z.literal('')),
+  role: roleSchema.optional(),
+  managerId: z.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
 
 // 営業担当者検索クエリのスキーマ
 export const salesPersonQuerySchema = z
