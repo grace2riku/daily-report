@@ -809,11 +809,12 @@ describe('PUT /api/v1/sales-persons/{id}', () => {
 
     it('メールアドレスを更新できる（重複なし）', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      const findFirstMock = vi.mocked(prisma.salesPerson.findFirst);
       const updateMock = vi.mocked(prisma.salesPerson.update);
 
-      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
-      findFirstMock.mockResolvedValueOnce(null); // 重複なし
+      // 対象の営業担当者が存在する（現在のメールアドレスを含む）
+      findUniqueMock.mockResolvedValueOnce({ id: 1, email: 'old@example.com' } as never);
+      // メールアドレス重複チェック（重複なし）
+      findUniqueMock.mockResolvedValueOnce(null);
       updateMock.mockResolvedValueOnce({
         ...updatedMember,
         email: 'newemail@example.com',
@@ -834,11 +835,9 @@ describe('PUT /api/v1/sales-persons/{id}', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.data.email).toBe('newemail@example.com');
-      expect(findFirstMock).toHaveBeenCalledWith({
-        where: {
-          email: 'newemail@example.com',
-          id: { not: 1 },
-        },
+      // findUniqueでメール重複チェックが行われる
+      expect(findUniqueMock).toHaveBeenCalledWith({
+        where: { email: 'newemail@example.com' },
         select: { id: true },
       });
     });
@@ -1049,12 +1048,14 @@ describe('PUT /api/v1/sales-persons/{id}', () => {
 
     it('複数項目を同時に更新できる', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      const findFirstMock = vi.mocked(prisma.salesPerson.findFirst);
       const updateMock = vi.mocked(prisma.salesPerson.update);
 
-      findUniqueMock.mockResolvedValueOnce({ id: 1 } as never);
-      findFirstMock.mockResolvedValueOnce(null); // メール重複なし
-      findUniqueMock.mockResolvedValueOnce({ id: 3 } as never); // 上長存在
+      // 対象の営業担当者が存在する（現在のメールアドレスを含む）
+      findUniqueMock.mockResolvedValueOnce({ id: 1, email: 'old@example.com' } as never);
+      // メールアドレス重複チェック（重複なし）
+      findUniqueMock.mockResolvedValueOnce(null);
+      // 上長存在チェック
+      findUniqueMock.mockResolvedValueOnce({ id: 3 } as never);
       updateMock.mockResolvedValueOnce({
         id: 1,
         employeeCode: 'EMP001',
@@ -1368,14 +1369,11 @@ describe('DELETE /api/v1/sales-persons/{id}', () => {
       });
     });
 
-    it('既に無効化されている営業担当者も削除できる', async () => {
+    it('既に無効化されている営業担当者を削除しようとすると422を返す', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
-      const updateMock = vi.mocked(prisma.salesPerson.update);
 
       // 既に無効化されている営業担当者が存在する
       findUniqueMock.mockResolvedValueOnce({ id: 5, isActive: false } as never);
-      // 論理削除（update）が成功
-      updateMock.mockResolvedValueOnce({ id: 5, isActive: false } as never);
 
       const payload: JwtPayload = {
         userId: mockAdmin.id,
@@ -1389,9 +1387,10 @@ describe('DELETE /api/v1/sales-persons/{id}', () => {
       const response = await DELETE(request, context);
       const data = await response.json();
 
-      expect(response.status).toBe(200);
-      expect(data.success).toBe(true);
-      expect(data.data.message).toBe('営業担当者を削除しました');
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('この営業担当者は既に無効化されています');
     });
   });
 
