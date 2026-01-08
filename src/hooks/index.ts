@@ -1,5 +1,6 @@
 export { useAuth, useRequireAuth, useRequireRole } from './useAuth';
 export { useCustomers, type CustomerItem } from './useCustomers';
+export { useCustomersAdmin } from './useCustomersAdmin';
 export {
   useReportList,
   useReportDetail,
