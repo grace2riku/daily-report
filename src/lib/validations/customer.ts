@@ -38,7 +38,10 @@ export const updateCustomerSchema = createCustomerSchema.partial().omit({ custom
 // 顧客検索クエリのスキーマ
 export const customerQuerySchema = z
   .object({
-    keyword: z.string().optional(),
+    keyword: z
+      .string()
+      .max(200, 'キーワードは200文字以内で入力してください')
+      .optional(),
     isActive: z
       .string()
       .transform((val) => {
