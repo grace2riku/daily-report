@@ -919,7 +919,7 @@ describe('POST /api/v1/customers', () => {
   });
 
   describe('認可エラー', () => {
-    it('memberロールでは403を返す', async () => {
+    it('[IT-040-02] memberロール（一般営業）では403を返す', async () => {
       const payload: JwtPayload = {
         userId: 1,
         email: 'member@example.com',
@@ -1175,7 +1175,7 @@ describe('POST /api/v1/customers', () => {
   });
 
   describe('顧客コード重複エラー', () => {
-    it('顧客コードが既に使用されている場合は409を返す', async () => {
+    it('[IT-040-03] 顧客コードが既に使用されている場合は409を返す', async () => {
       const findUniqueMock = vi.mocked(prisma.customer.findUnique);
       findUniqueMock.mockResolvedValueOnce({
         id: 1,
@@ -1210,7 +1210,7 @@ describe('POST /api/v1/customers', () => {
   });
 
   describe('正常系', () => {
-    it('全項目を指定して顧客を登録できる', async () => {
+    it('[IT-040-01] 管理者が全項目を指定して顧客を正常に登録できる', async () => {
       const findUniqueMock = vi.mocked(prisma.customer.findUnique);
       const createMock = vi.mocked(prisma.customer.create);
 

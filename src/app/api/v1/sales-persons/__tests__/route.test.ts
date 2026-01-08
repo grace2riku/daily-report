@@ -695,7 +695,7 @@ describe('POST /api/v1/sales-persons', () => {
       expect(data.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('IT-030-02: 一般営業が登録しようとすると403を返す', async () => {
+    it('[IT-030-02] 一般営業が登録しようとすると403を返す', async () => {
       const payload: JwtPayload = {
         userId: mockMember.id,
         email: mockMember.email,
@@ -735,7 +735,7 @@ describe('POST /api/v1/sales-persons', () => {
   });
 
   describe('正常系', () => {
-    it('IT-030-01: 管理者が正常に登録できる', async () => {
+    it('[IT-030-01] 管理者が正常に登録できる', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
       const createMock = vi.mocked(prisma.salesPerson.create);
 
@@ -882,7 +882,7 @@ describe('POST /api/v1/sales-persons', () => {
   });
 
   describe('重複エラー', () => {
-    it('IT-030-03: 社員番号が重複している場合は409を返す', async () => {
+    it('[IT-030-03] 社員番号が重複している場合は409を返す', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
 
       // 社員番号が既に存在
@@ -907,7 +907,7 @@ describe('POST /api/v1/sales-persons', () => {
       expect(data.error.message).toBe('この社員番号は既に使用されています');
     });
 
-    it('IT-030-04: メールアドレスが重複している場合は409を返す', async () => {
+    it('[IT-030-04] メールアドレスが重複している場合は409を返す', async () => {
       const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
 
       // 社員番号は重複なし、メールが既に存在
@@ -936,7 +936,7 @@ describe('POST /api/v1/sales-persons', () => {
   });
 
   describe('バリデーションエラー', () => {
-    it('IT-030-05: パスワードが8文字未満の場合は422を返す', async () => {
+    it('[IT-030-05] パスワードが8文字未満の場合は422を返す', async () => {
       const payload: JwtPayload = {
         userId: mockAdmin.id,
         email: mockAdmin.email,
