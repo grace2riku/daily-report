@@ -3,6 +3,7 @@
  *
  * GET /api/v1/customers/{id} - 顧客詳細を取得
  * PUT /api/v1/customers/{id} - 顧客情報を更新（管理者のみ）
+ * DELETE /api/v1/customers/{id} - 顧客を削除（論理削除）（管理者のみ）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -202,6 +203,64 @@ export async function PUT(
     } catch (error) {
       console.error('Customer update error:', error);
       return errorResponse('INTERNAL_ERROR', '顧客の更新に失敗しました');
+    }
+  });
+}
+
+/**
+ * DELETE /api/v1/customers/{id}
+ *
+ * 顧客を削除する（論理削除: is_active = false）。
+ * 管理者のみ実行可能。
+ *
+ * パスパラメータ:
+ * - id: integer - 顧客ID
+ *
+ * レスポンス:
+ * - 200: 削除成功メッセージ
+ * - 401: 認証エラー
+ * - 403: 権限エラー（管理者以外）
+ * - 404: 顧客が存在しない
+ * - 422: バリデーションエラー
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return withAdmin(request, async (_req, _user: AuthUser): Promise<NextResponse> => {
+    try {
+      // パスパラメータを取得
+      const params = await context.params;
+      const idParam = params.id;
+
+      // IDのバリデーション
+      const idValidationResult = idParamSchema.safeParse(idParam);
+      if (!idValidationResult.success) {
+        return errorResponse('VALIDATION_ERROR', 'IDは正の整数で指定してください');
+      }
+
+      const customerId = idValidationResult.data;
+
+      // 顧客の存在確認
+      const existingCustomer = await prisma.customer.findUnique({
+        where: { id: customerId },
+        select: { id: true },
+      });
+
+      if (!existingCustomer) {
+        return errorResponse('NOT_FOUND', '顧客が見つかりません');
+      }
+
+      // 論理削除（is_active を false に更新）
+      await prisma.customer.update({
+        where: { id: customerId },
+        data: { isActive: false },
+      });
+
+      return successResponse({ message: '顧客を削除しました' });
+    } catch (error) {
+      console.error('Customer delete error:', error);
+      return errorResponse('INTERNAL_ERROR', '顧客の削除に失敗しました');
     }
   });
 }
