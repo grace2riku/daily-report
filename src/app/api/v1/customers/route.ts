@@ -2,19 +2,21 @@
  * 顧客API
  *
  * GET /api/v1/customers - 顧客一覧を取得
+ * POST /api/v1/customers - 顧客を新規登録（管理者のみ）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
   paginatedResponse,
+  successResponse,
   errorResponse,
   calculatePagination,
   calculateOffset,
 } from '@/lib/api/response';
-import { withAuth, type AuthUser } from '@/lib/auth/middleware';
+import { withAuth, withAdmin, type AuthUser } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/prisma';
-import { customerQuerySchema } from '@/lib/validations/customer';
+import { customerQuerySchema, createCustomerSchema } from '@/lib/validations/customer';
 
 /**
  * GET /api/v1/customers
@@ -127,6 +129,93 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error('Customer list fetch error:', error);
       return errorResponse('INTERNAL_ERROR', '顧客一覧の取得に失敗しました');
+    }
+  });
+}
+
+/**
+ * POST /api/v1/customers
+ *
+ * 顧客を新規登録する。
+ * 管理者のみ実行可能。
+ *
+ * リクエストボディ（snake_case）:
+ * - customer_code: string - 顧客コード（必須、半角英数字、最大20文字、一意）
+ * - name: string - 顧客名（必須、最大200文字）
+ * - address: string | null - 住所（任意、最大500文字）
+ * - phone: string | null - 電話番号（任意、電話番号形式、最大20文字）
+ * - is_active: boolean - 有効フラグ（デフォルト: true）
+ */
+export async function POST(request: NextRequest) {
+  return withAdmin(request, async (_req, _user: AuthUser): Promise<NextResponse> => {
+    try {
+      // リクエストボディを取得
+      const body = await request.json();
+
+      // snake_case から camelCase に変換
+      const camelCaseBody = {
+        customerCode: body.customer_code,
+        name: body.name,
+        address: body.address,
+        phone: body.phone,
+        isActive: body.is_active,
+      };
+
+      // バリデーション
+      const validationResult = createCustomerSchema.safeParse(camelCaseBody);
+      if (!validationResult.success) {
+        const issues = validationResult.error.issues;
+        const firstError = issues[0];
+        return errorResponse('VALIDATION_ERROR', firstError?.message || '入力値が不正です');
+      }
+
+      const { customerCode, name, address, phone, isActive } = validationResult.data;
+
+      // 顧客コードの重複チェック
+      const existingCustomer = await prisma.customer.findUnique({
+        where: { customerCode },
+        select: { id: true },
+      });
+
+      if (existingCustomer) {
+        return errorResponse('DUPLICATE_CUSTOMER_CODE', 'この顧客コードは既に使用されています');
+      }
+
+      // 顧客を作成
+      const customer = await prisma.customer.create({
+        data: {
+          customerCode,
+          name,
+          address: address || null,
+          phone: phone || null,
+          isActive,
+        },
+        select: {
+          id: true,
+          customerCode: true,
+          name: true,
+          address: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
+
+      // レスポンス形式に変換（snake_case）
+      const responseData = {
+        id: customer.id,
+        customer_code: customer.customerCode,
+        name: customer.name,
+        address: customer.address,
+        phone: customer.phone,
+        is_active: customer.isActive,
+        created_at: customer.createdAt.toISOString(),
+      };
+
+      return successResponse(responseData);
+    } catch (error) {
+      console.error('Customer creation error:', error);
+      return errorResponse('INTERNAL_ERROR', '顧客の登録に失敗しました');
     }
   });
 }

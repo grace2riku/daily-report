@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/customers APIのテスト
+ * GET /api/v1/customers, POST /api/v1/customers APIのテスト
  *
  * @vitest-environment node
  */
@@ -11,7 +11,7 @@ import { generateToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/prisma';
 import type { JwtPayload } from '@/types';
 
-import { GET } from '../route';
+import { GET, POST } from '../route';
 
 // Prisma モック
 vi.mock('@/lib/prisma', () => ({
@@ -19,6 +19,8 @@ vi.mock('@/lib/prisma', () => ({
     customer: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
     },
   },
 }));
@@ -92,9 +94,12 @@ const mockUser = {
 };
 
 /**
- * テスト用のリクエストを作成
+ * テスト用のGETリクエストを作成
  */
-function createRequest(token?: string, params?: Record<string, string | undefined>): NextRequest {
+function createGetRequest(
+  token?: string,
+  params?: Record<string, string | undefined>
+): NextRequest {
   const url = new URL('http://localhost:3000/api/v1/customers');
 
   if (params) {
@@ -122,6 +127,33 @@ function createRequest(token?: string, params?: Record<string, string | undefine
       'Content-Type': 'application/json',
     },
   });
+}
+
+/**
+ * テスト用のPOSTリクエストを作成
+ */
+function createPostRequest(token?: string, body?: Record<string, unknown>): NextRequest {
+  const url = new URL('http://localhost:3000/api/v1/customers');
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'POST',
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+/**
+ * 後方互換性のためのエイリアス
+ */
+function createRequest(token?: string, params?: Record<string, string | undefined>): NextRequest {
+  return createGetRequest(token, params);
 }
 
 describe('GET /api/v1/customers', () => {
@@ -838,6 +870,856 @@ describe('GET /api/v1/customers', () => {
       const request = createRequest(token);
 
       const response = await GET(request);
+      expect(response.status).toBe(200);
+    });
+  });
+});
+
+describe('POST /api/v1/customers', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe('認証エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const request = createPostRequest(undefined, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(data.error.message).toBe('認証が必要です');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const request = createPostRequest('invalid-token', {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('認可エラー', () => {
+    it('memberロールでは403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'member@example.com',
+        role: 'member',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この操作を行う権限がありません');
+    });
+
+    it('managerロールでは403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 2,
+        email: 'manager@example.com',
+        role: 'manager',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('バリデーションエラー', () => {
+    it('customer_codeが未入力の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      // customer_codeがundefinedの場合、Zodのデフォルトメッセージが返る
+      expect(data.error.message).toBeTruthy();
+    });
+
+    it('customer_codeが空文字の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: '',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('customer_codeが21文字以上の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'A'.repeat(21),
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('20文字以内');
+    });
+
+    it('customer_codeに半角英数字以外が含まれる場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001-テスト',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('半角英数字');
+    });
+
+    it('nameが未入力の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      // nameがundefinedの場合、Zodのデフォルトメッセージが返る
+      expect(data.error.message).toBeTruthy();
+    });
+
+    it('nameが空文字の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: '',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('nameが201文字以上の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'あ'.repeat(201),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('200文字以内');
+    });
+
+    it('addressが501文字以上の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+        address: 'あ'.repeat(501),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('500文字以内');
+    });
+
+    it('phoneが21文字以上の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+        phone: '0'.repeat(21),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('20文字以内');
+    });
+
+    it('phoneが不正な形式の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+        phone: 'invalid-phone',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('有効な電話番号');
+    });
+  });
+
+  describe('顧客コード重複エラー', () => {
+    it('顧客コードが既に使用されている場合は409を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: '既存顧客',
+        address: null,
+        phone: null,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('DUPLICATE_CUSTOMER_CODE');
+      expect(data.error.message).toBe('この顧客コードは既に使用されています');
+    });
+  });
+
+  describe('正常系', () => {
+    it('全項目を指定して顧客を登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト顧客株式会社',
+        address: '東京都港区1-2-3',
+        phone: '03-1234-5678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客株式会社',
+        address: '東京都港区1-2-3',
+        phone: '03-1234-5678',
+        is_active: true,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toMatchObject({
+        id: 1,
+        customer_code: 'C001',
+        name: 'テスト顧客株式会社',
+        address: '東京都港区1-2-3',
+        phone: '03-1234-5678',
+        is_active: true,
+      });
+      expect(data.data.created_at).toBe(createdAt.toISOString());
+    });
+
+    it('任意項目を省略して顧客を登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 2,
+        customerCode: 'C002',
+        name: '最小構成顧客',
+        address: null,
+        phone: null,
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C002',
+        name: '最小構成顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toMatchObject({
+        id: 2,
+        customer_code: 'C002',
+        name: '最小構成顧客',
+        address: null,
+        phone: null,
+        is_active: true,
+      });
+    });
+
+    it('is_active=falseで顧客を登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 3,
+        customerCode: 'C003',
+        name: '無効顧客',
+        address: null,
+        phone: null,
+        isActive: false,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C003',
+        name: '無効顧客',
+        is_active: false,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.is_active).toBe(false);
+    });
+
+    it('レスポンス形式がsnake_caseで正しい', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'ABC123',
+        name: 'テスト',
+        address: '住所',
+        phone: '03-1234-5678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'ABC123',
+        name: 'テスト',
+        address: '住所',
+        phone: '03-1234-5678',
+        is_active: true,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      // snake_caseのキーが正しく存在することを確認
+      expect(data.data).toHaveProperty('customer_code');
+      expect(data.data).toHaveProperty('is_active');
+      expect(data.data).toHaveProperty('created_at');
+
+      // camelCaseのキーが存在しないことを確認
+      expect(data.data).not.toHaveProperty('customerCode');
+      expect(data.data).not.toHaveProperty('isActive');
+      expect(data.data).not.toHaveProperty('createdAt');
+    });
+
+    it('Prismaのcreateが正しいパラメータで呼ばれる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト顧客',
+        address: '東京都港区',
+        phone: '03-1234-5678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+        address: '東京都港区',
+        phone: '03-1234-5678',
+        is_active: true,
+      });
+
+      await POST(request);
+
+      expect(createMock).toHaveBeenCalledWith({
+        data: {
+          customerCode: 'C001',
+          name: 'テスト顧客',
+          address: '東京都港区',
+          phone: '03-1234-5678',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          customerCode: true,
+          name: true,
+          address: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
+    });
+
+    it('有効な電話番号形式を受け入れる（ハイフンあり）', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト',
+        address: null,
+        phone: '03-1234-5678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト',
+        phone: '03-1234-5678',
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+
+    it('有効な電話番号形式を受け入れる（ハイフンなし）', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト',
+        address: null,
+        phone: '0312345678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト',
+        phone: '0312345678',
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+
+    it('有効な電話番号形式を受け入れる（携帯電話）', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト',
+        address: null,
+        phone: '090-1234-5678',
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト',
+        phone: '090-1234-5678',
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('エラーハンドリング', () => {
+    it('データベースエラー（findUnique）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      findUniqueMock.mockRejectedValueOnce(new Error('Database connection error'));
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('顧客の登録に失敗しました');
+    });
+
+    it('データベースエラー（create）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+      createMock.mockRejectedValueOnce(new Error('Database constraint error'));
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト顧客',
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('顧客の登録に失敗しました');
+    });
+  });
+
+  describe('境界値テスト', () => {
+    it('customer_codeが20文字ちょうどの場合は登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      const customerCode = 'A'.repeat(20);
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode,
+        name: 'テスト',
+        address: null,
+        phone: null,
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: customerCode,
+        name: 'テスト',
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+
+    it('nameが200文字ちょうどの場合は登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      const name = 'あ'.repeat(200);
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name,
+        address: null,
+        phone: null,
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name,
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+
+    it('addressが500文字ちょうどの場合は登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      const address = 'あ'.repeat(500);
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト',
+        address,
+        phone: null,
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト',
+        address,
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+    });
+
+    it('phoneが有効な電話番号形式の場合は登録できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.customer.findUnique);
+      const createMock = vi.mocked(prisma.customer.create);
+
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const createdAt = new Date('2025-01-15T10:00:00Z');
+      const phone = '0120-123-456'; // 有効な電話番号形式
+      createMock.mockResolvedValueOnce({
+        id: 1,
+        customerCode: 'C001',
+        name: 'テスト',
+        address: null,
+        phone,
+        isActive: true,
+        createdAt,
+      } as never);
+
+      const payload: JwtPayload = {
+        userId: 1,
+        email: 'admin@example.com',
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createPostRequest(token, {
+        customer_code: 'C001',
+        name: 'テスト',
+        phone,
+      });
+
+      const response = await POST(request);
       expect(response.status).toBe(200);
     });
   });
