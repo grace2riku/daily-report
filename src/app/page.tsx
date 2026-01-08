@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { LoadingPage } from '@/components/common/Loading';
 import { ReportTable, SearchForm, type SearchFormValues } from '@/components/dashboard';
+import { Header } from '@/components/layout/Header';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Button } from '@/components/ui/button';
 import { useRequireAuth } from '@/hooks/useAuth';
@@ -112,44 +113,49 @@ export default function Dashboard() {
   }
 
   return (
-    <PageContainer
-      title="日報一覧"
-      actions={
-        <Button asChild>
-          <Link href="/reports/new">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            新規作成
-          </Link>
-        </Button>
-      }
-    >
-      {/* 検索フォーム */}
-      <div className="mb-6">
-        <SearchForm
-          values={searchValues}
-          onChange={setSearchValues}
-          onSearch={handleSearch}
-          salesPersons={salesPersons}
-          currentUserId={auth.user?.id}
-          currentUserRole={auth.user?.role}
+    <>
+      {/* ヘッダー */}
+      <Header userName={auth.user?.name} userRole={auth.user?.role} onLogout={auth.logout} />
+
+      <PageContainer
+        title="日報一覧"
+        actions={
+          <Button asChild>
+            <Link href="/reports/new">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              新規作成
+            </Link>
+          </Button>
+        }
+      >
+        {/* 検索フォーム */}
+        <div className="mb-6">
+          <SearchForm
+            values={searchValues}
+            onChange={setSearchValues}
+            onSearch={handleSearch}
+            salesPersons={salesPersons}
+            currentUserId={auth.user?.id}
+            currentUserRole={auth.user?.role}
+            isLoading={isReportsLoading}
+          />
+        </div>
+
+        {/* エラーメッセージ */}
+        {error && (
+          <div className="mb-6">
+            <ErrorMessage message={error} />
+          </div>
+        )}
+
+        {/* 日報一覧テーブル */}
+        <ReportTable
+          reports={reports}
+          pagination={pagination}
+          onPageChange={handlePageChange}
           isLoading={isReportsLoading}
         />
-      </div>
-
-      {/* エラーメッセージ */}
-      {error && (
-        <div className="mb-6">
-          <ErrorMessage message={error} />
-        </div>
-      )}
-
-      {/* 日報一覧テーブル */}
-      <ReportTable
-        reports={reports}
-        pagination={pagination}
-        onPageChange={handlePageChange}
-        isLoading={isReportsLoading}
-      />
-    </PageContainer>
+      </PageContainer>
+    </>
   );
 }
