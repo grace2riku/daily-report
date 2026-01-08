@@ -504,7 +504,10 @@ describe('GET /api/v1/customers', () => {
       expect(countMock).toHaveBeenCalledWith({
         where: {
           isActive: true,
-          OR: [{ name: { contains: '株式会社ABC' } }, { customerCode: { contains: '株式会社ABC' } }],
+          OR: [
+            { name: { contains: '株式会社ABC' } },
+            { customerCode: { contains: '株式会社ABC' } },
+          ],
         },
       });
     });

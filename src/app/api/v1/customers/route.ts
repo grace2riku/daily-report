@@ -103,23 +103,25 @@ export async function GET(request: NextRequest) {
       });
 
       // レスポンス形式に変換（snake_case）
-      const data = customers.map((customer: {
-        id: number;
-        customerCode: string;
-        name: string;
-        address: string | null;
-        phone: string | null;
-        isActive: boolean;
-        createdAt: Date;
-      }) => ({
-        id: customer.id,
-        customer_code: customer.customerCode,
-        name: customer.name,
-        address: customer.address,
-        phone: customer.phone,
-        is_active: customer.isActive,
-        created_at: customer.createdAt.toISOString(),
-      }));
+      const data = customers.map(
+        (customer: {
+          id: number;
+          customerCode: string;
+          name: string;
+          address: string | null;
+          phone: string | null;
+          isActive: boolean;
+          createdAt: Date;
+        }) => ({
+          id: customer.id,
+          customer_code: customer.customerCode,
+          name: customer.name,
+          address: customer.address,
+          phone: customer.phone,
+          is_active: customer.isActive,
+          created_at: customer.createdAt.toISOString(),
+        })
+      );
 
       return paginatedResponse(data, pagination);
     } catch (error) {
