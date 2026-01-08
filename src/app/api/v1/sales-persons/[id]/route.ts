@@ -3,6 +3,7 @@
  *
  * GET /api/v1/sales-persons/{id} - 営業担当者詳細を取得
  * PUT /api/v1/sales-persons/{id} - 営業担当者情報を更新（管理者のみ）
+ * DELETE /api/v1/sales-persons/{id} - 営業担当者を削除（論理削除）（管理者のみ）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -296,6 +297,66 @@ export async function PUT(
     } catch (error) {
       console.error('Sales person update error:', error);
       return errorResponse('INTERNAL_ERROR', '営業担当者の更新に失敗しました');
+    }
+  });
+}
+
+/**
+ * DELETE /api/v1/sales-persons/{id}
+ *
+ * 営業担当者を削除する（論理削除）。
+ * 管理者のみ実行可能。
+ *
+ * パスパラメータ:
+ * - id: integer - 営業担当者ID
+ *
+ * レスポンス:
+ * - 200: 削除成功メッセージ
+ * - 401: 認証エラー
+ * - 403: 権限エラー（管理者以外）
+ * - 404: 営業担当者が存在しない
+ * - 422: バリデーションエラー
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return withAdmin(request, async (_req, _user: AuthUser): Promise<NextResponse> => {
+    try {
+      // パスパラメータを取得
+      const params = await context.params;
+      const idParam = params.id;
+
+      // IDのバリデーション
+      const validationResult = idParamSchema.safeParse(idParam);
+      if (!validationResult.success) {
+        return errorResponse('VALIDATION_ERROR', 'IDは正の整数で指定してください');
+      }
+
+      const salesPersonId = validationResult.data;
+
+      // 営業担当者の存在確認
+      const existingSalesPerson = await prisma.salesPerson.findUnique({
+        where: { id: salesPersonId },
+        select: { id: true, isActive: true },
+      });
+
+      if (!existingSalesPerson) {
+        return errorResponse('NOT_FOUND', '営業担当者が見つかりません');
+      }
+
+      // 論理削除（is_active を false に更新）
+      await prisma.salesPerson.update({
+        where: { id: salesPersonId },
+        data: { isActive: false },
+      });
+
+      return successResponse({
+        message: '営業担当者を削除しました',
+      });
+    } catch (error) {
+      console.error('Sales person delete error:', error);
+      return errorResponse('INTERNAL_ERROR', '営業担当者の削除に失敗しました');
     }
   });
 }

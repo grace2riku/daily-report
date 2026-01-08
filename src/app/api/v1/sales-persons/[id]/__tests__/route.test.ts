@@ -1,5 +1,5 @@
 /**
- * GET/PUT /api/v1/sales-persons/{id} APIのテスト
+ * GET/PUT/DELETE /api/v1/sales-persons/{id} APIのテスト
  *
  * @vitest-environment node
  */
@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/utils/password';
 import type { JwtPayload } from '@/types';
 
-import { GET, PUT } from '../route';
+import { GET, PUT, DELETE } from '../route';
 
 // hashPasswordモック
 vi.mock('@/lib/utils/password', () => ({
@@ -1153,6 +1153,347 @@ describe('PUT /api/v1/sales-persons/{id}', () => {
       expect(data.success).toBe(false);
       expect(data.error.code).toBe('INTERNAL_ERROR');
       expect(data.error.message).toBe('営業担当者の更新に失敗しました');
+    });
+  });
+});
+
+/**
+ * テスト用のDELETEリクエストを作成
+ */
+function createDeleteRequest(id: string, token?: string): NextRequest {
+  const url = new URL(`http://localhost:3000/api/v1/sales-persons/${id}`);
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(url, {
+    method: 'DELETE',
+    headers,
+  });
+}
+
+describe('DELETE /api/v1/sales-persons/{id}', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    vi.resetAllMocks();
+    vi.mocked(hashPassword).mockResolvedValue('hashed_password');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe('認証エラー', () => {
+    it('トークンなしの場合は401を返す', async () => {
+      const request = createDeleteRequest('1');
+      const context = createContext('1');
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+      expect(data.error.message).toBe('認証が必要です');
+    });
+
+    it('無効なトークンの場合は401を返す', async () => {
+      const request = createDeleteRequest('1', 'invalid-token');
+      const context = createContext('1');
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('認可エラー', () => {
+    it('一般営業（member）の場合は403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockMember.id,
+        email: mockMember.email,
+        role: 'member',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この操作を行う権限がありません');
+    });
+
+    it('上長（manager）の場合は403を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockManager.id,
+        email: mockManager.email,
+        role: 'manager',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('FORBIDDEN');
+      expect(data.error.message).toBe('この操作を行う権限がありません');
+    });
+  });
+
+  describe('バリデーションエラー', () => {
+    it('IDが数値でない場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('abc', token);
+      const context = createContext('abc');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toBe('IDは正の整数で指定してください');
+    });
+
+    it('IDが0の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('0', token);
+      const context = createContext('0');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('IDが負の数の場合は422を返す', async () => {
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('-1', token);
+      const context = createContext('-1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('NOT_FOUNDエラー', () => {
+    it('存在しないIDの場合は404を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      findUniqueMock.mockResolvedValueOnce(null);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('9999', token);
+      const context = createContext('9999');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('NOT_FOUND');
+      expect(data.error.message).toBe('営業担当者が見つかりません');
+    });
+  });
+
+  describe('正常系', () => {
+    it('管理者が営業担当者を削除できる（論理削除）', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const updateMock = vi.mocked(prisma.salesPerson.update);
+
+      // 営業担当者が存在する
+      findUniqueMock.mockResolvedValueOnce({ id: 1, isActive: true } as never);
+      // 論理削除（update）が成功
+      updateMock.mockResolvedValueOnce({ id: 1, isActive: false } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.message).toBe('営業担当者を削除しました');
+
+      // updateがisActive: falseで呼ばれていることを確認
+      expect(updateMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { isActive: false },
+      });
+    });
+
+    it('既に無効化されている営業担当者も削除できる', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const updateMock = vi.mocked(prisma.salesPerson.update);
+
+      // 既に無効化されている営業担当者が存在する
+      findUniqueMock.mockResolvedValueOnce({ id: 5, isActive: false } as never);
+      // 論理削除（update）が成功
+      updateMock.mockResolvedValueOnce({ id: 5, isActive: false } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('5', token);
+      const context = createContext('5');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.message).toBe('営業担当者を削除しました');
+    });
+  });
+
+  describe('エラーハンドリング', () => {
+    it('データベースエラー（findUnique）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      findUniqueMock.mockRejectedValueOnce(new Error('Database connection error'));
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('営業担当者の削除に失敗しました');
+    });
+
+    it('データベースエラー（update）の場合は500を返す', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const updateMock = vi.mocked(prisma.salesPerson.update);
+
+      // 営業担当者が存在する
+      findUniqueMock.mockResolvedValueOnce({ id: 1, isActive: true } as never);
+      // updateでエラー発生
+      updateMock.mockRejectedValueOnce(new Error('Database update error'));
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      const response = await DELETE(request, context);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('INTERNAL_ERROR');
+      expect(data.error.message).toBe('営業担当者の削除に失敗しました');
+    });
+  });
+
+  describe('Prismaクエリの検証', () => {
+    it('正しいパラメータでfindUniqueが呼ばれる', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const updateMock = vi.mocked(prisma.salesPerson.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1, isActive: true } as never);
+      updateMock.mockResolvedValueOnce({ id: 1, isActive: false } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      await DELETE(request, context);
+
+      expect(findUniqueMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { id: true, isActive: true },
+      });
+    });
+
+    it('正しいパラメータでupdateが呼ばれる（論理削除）', async () => {
+      const findUniqueMock = vi.mocked(prisma.salesPerson.findUnique);
+      const updateMock = vi.mocked(prisma.salesPerson.update);
+
+      findUniqueMock.mockResolvedValueOnce({ id: 1, isActive: true } as never);
+      updateMock.mockResolvedValueOnce({ id: 1, isActive: false } as never);
+
+      const payload: JwtPayload = {
+        userId: mockAdmin.id,
+        email: mockAdmin.email,
+        role: 'admin',
+      };
+      const token = await generateToken(payload);
+      const request = createDeleteRequest('1', token);
+      const context = createContext('1');
+
+      await DELETE(request, context);
+
+      expect(updateMock).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { isActive: false },
+      });
     });
   });
 });
