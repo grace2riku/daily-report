@@ -31,8 +31,32 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# SQLite と Litestream に必要なパッケージをインストール
+RUN apk add --no-cache \
+    sqlite \
+    ca-certificates \
+    wget \
+    bash
+
+# Litestream をインストール（Alpine Linux用）
+ARG LITESTREAM_VERSION=v0.3.13
+RUN wget -q -O /tmp/litestream.tar.gz \
+    https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz && \
+    tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin && \
+    rm /tmp/litestream.tar.gz && \
+    chmod +x /usr/local/bin/litestream
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# データディレクトリを作成
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
+# Prismaファイルをコピー（マイグレーション用）
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 COPY --from=builder /app/public ./public
 
@@ -42,6 +66,16 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Litestream設定ファイルをコピー
+COPY --chown=nextjs:nodejs litestream.yml /etc/litestream.yml
+
+# 起動スクリプトをコピー
+COPY --chown=nextjs:nodejs scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# データディレクトリの所有権を確認
+RUN chown -R nextjs:nodejs /app/data
+
 USER nextjs
 
 EXPOSE 8080
@@ -49,4 +83,5 @@ EXPOSE 8080
 ENV PORT=8080
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# 起動スクリプトを実行
+CMD ["/app/start.sh"]

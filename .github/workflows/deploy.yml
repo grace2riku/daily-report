@@ -62,6 +62,12 @@ jobs:
             --cpu=1
             --min-instances=0
             --max-instances=10
+          env_vars: |
+            DATABASE_URL=file:/app/data/prod.db
+            NODE_ENV=production
+            LITESTREAM_REPLICA_BUCKET=${{ secrets.LITESTREAM_REPLICA_BUCKET }}
+          secrets: |
+            JWT_SECRET=JWT_SECRET:latest
 
       - name: Show URL
         run: echo "Service URL ${{ steps.deploy.outputs.url }}"
