@@ -41,7 +41,6 @@ test.describe('コメント機能 (E2E-020)', () => {
 
     // ページの下部までスクロールしてコメントセクションを表示
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(500);
 
     // コメントセクションが表示されていることを確認（CardTitleはdiv要素）
     const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
@@ -72,10 +71,9 @@ test.describe('コメント機能 (E2E-020)', () => {
 
     // 投稿処理の完了を待機
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000); // UIが更新されるのを待つ
 
     // 5. 期待結果: コメントが追加される
-    // 投稿したコメントが表示されていることを確認
+    // 投稿したコメントが表示されていることを確認（これが表示待機の役割も果たす）
     await expect(page.locator(`text=${testComment}`)).toBeVisible({ timeout: 10000 });
 
     // コメント数が増加していることを確認
@@ -121,7 +119,6 @@ test.describe('コメント機能 (E2E-020)', () => {
 
     // ページの下部までスクロールしてコメントセクションを表示
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(500);
 
     // コメントセクションが表示されていることを確認
     const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
@@ -155,7 +152,11 @@ test.describe('コメント機能 (E2E-020)', () => {
 
     // 削除処理の完了を待機
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000); // UIが更新されるのを待つ
+
+    // 確認ダイアログが閉じるのを待機（これがUI更新の確認になる）
+    await expect(page.getByRole('heading', { name: 'コメントを削除' })).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // 3. 期待結果: コメントが削除される
     // コメント数が減少していることを確認
@@ -165,9 +166,6 @@ test.describe('コメント機能 (E2E-020)', () => {
       ? parseInt(updatedCommentCountMatch[1], 10)
       : 0;
     expect(updatedCommentCount).toBe(currentCommentCount - 1);
-
-    // 確認ダイアログが閉じていることを確認
-    await expect(page.getByRole('heading', { name: 'コメントを削除' })).not.toBeVisible();
   });
 
   test.describe('コメント投稿のバリデーション', () => {
@@ -189,7 +187,6 @@ test.describe('コメント機能 (E2E-020)', () => {
 
       // ページの下部までスクロール
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(500);
 
       // コメント入力欄が空の状態で投稿ボタンが無効になっていることを確認
       const submitButton = page.locator('button:has-text("コメント投稿")');
@@ -226,7 +223,6 @@ test.describe('コメント機能 (E2E-020)', () => {
 
       // ページの下部までスクロール
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(500);
 
       // コメント一覧は表示される
       const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
@@ -258,7 +254,6 @@ test.describe('コメント機能 (E2E-020)', () => {
 
       // ページの下部までスクロール
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(500);
 
       // コメントセクションが表示されていることを確認
       const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
@@ -271,6 +266,10 @@ test.describe('コメント機能 (E2E-020)', () => {
   });
 
   test.describe('コメント削除のキャンセル', () => {
+    /**
+     * このテストはE2E-020-01で投稿したコメントがある前提で実行される。
+     * 直列実行のため、前のテストでコメントが投稿されている。
+     */
     test('削除確認ダイアログでキャンセルするとコメントは削除されない', async ({ page }) => {
       // 上長アカウント（佐藤課長）でログイン
       await login(page, 'manager@example.com', 'manager123');
@@ -289,47 +288,44 @@ test.describe('コメント機能 (E2E-020)', () => {
 
       // ページの下部までスクロール
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(500);
+
+      // コメントセクションが表示されるまで待機
+      const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
+      await expect(commentHeader).toBeVisible({ timeout: 10000 });
 
       // コメント数を取得
-      const commentHeader = page.locator('[data-slot="card-title"]:has-text("コメント（")');
       const commentHeaderText = await commentHeader.textContent();
       const currentCommentCountMatch = commentHeaderText?.match(/コメント（(\d+)件）/);
       const currentCommentCount = currentCommentCountMatch
         ? parseInt(currentCommentCountMatch[1], 10)
         : 0;
 
-      // 削除ボタンが表示されている場合のみテスト実行
+      // 削除ボタンが表示されていることを確認（前提条件）
       const deleteButton = page.locator('button[aria-label="コメントを削除"]').first();
-      const isDeleteButtonVisible = await deleteButton.isVisible().catch(() => false);
+      await expect(deleteButton).toBeVisible({ timeout: 5000 });
 
-      if (isDeleteButtonVisible && currentCommentCount > 0) {
-        // 削除ボタンをクリック
-        await deleteButton.click();
+      // 削除ボタンをクリック
+      await deleteButton.click();
 
-        // 確認ダイアログが表示される
-        await expect(page.getByRole('heading', { name: 'コメントを削除' })).toBeVisible({
-          timeout: 5000,
-        });
+      // 確認ダイアログが表示される
+      await expect(page.getByRole('heading', { name: 'コメントを削除' })).toBeVisible({
+        timeout: 5000,
+      });
 
-        // キャンセルボタンをクリック
-        const cancelButton = page.getByRole('button', { name: 'キャンセル' });
-        await cancelButton.click();
+      // キャンセルボタンをクリック
+      const cancelButton = page.getByRole('button', { name: 'キャンセル' });
+      await cancelButton.click();
 
-        // ダイアログが閉じる
-        await expect(page.getByRole('heading', { name: 'コメントを削除' })).not.toBeVisible();
+      // ダイアログが閉じる
+      await expect(page.getByRole('heading', { name: 'コメントを削除' })).not.toBeVisible();
 
-        // コメント数が変わっていないことを確認
-        const updatedCommentHeaderText = await commentHeader.textContent();
-        const updatedCommentCountMatch = updatedCommentHeaderText?.match(/コメント（(\d+)件）/);
-        const updatedCommentCount = updatedCommentCountMatch
-          ? parseInt(updatedCommentCountMatch[1], 10)
-          : 0;
-        expect(updatedCommentCount).toBe(currentCommentCount);
-      } else {
-        // 削除ボタンがない場合はテストをスキップ（前のテストで全て削除済みの可能性）
-        test.skip();
-      }
+      // コメント数が変わっていないことを確認
+      const updatedCommentHeaderText = await commentHeader.textContent();
+      const updatedCommentCountMatch = updatedCommentHeaderText?.match(/コメント（(\d+)件）/);
+      const updatedCommentCount = updatedCommentCountMatch
+        ? parseInt(updatedCommentCountMatch[1], 10)
+        : 0;
+      expect(updatedCommentCount).toBe(currentCommentCount);
     });
   });
 });
