@@ -133,7 +133,7 @@ test.describe('E2E-010: 日報作成シナリオ', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: '日報作成' })).toBeVisible();
 
-    // 2. 報告日を選択（1週間前 - 確実にユニークな日付）
+    // 2. 報告日を選択（2日前）
     await selectDateDaysAgo(page, TEST_DATE_OFFSETS['E2E-010-01']);
 
     // 3. 訪問記録を追加
@@ -175,7 +175,7 @@ test.describe('E2E-010: 日報作成シナリオ', () => {
     await page.goto('/reports/new');
     await page.waitForLoadState('networkidle');
 
-    // 2週間前の日付を選択（確実にユニーク）
+    // 3日前の日付を選択
     await selectDateDaysAgo(page, TEST_DATE_OFFSETS['E2E-010-02']);
 
     // 顧客選択と訪問内容入力
@@ -207,7 +207,7 @@ test.describe('E2E-010: 日報作成シナリオ', () => {
     await page.goto('/reports/new');
     await page.waitForLoadState('networkidle');
 
-    // 3週間前の日付を選択（確実にユニーク）
+    // 4日前の日付を選択
     await selectDateDaysAgo(page, TEST_DATE_OFFSETS['E2E-010-03']);
 
     // 訪問記録の追加ボタンを2回クリック（合計3件にする）
