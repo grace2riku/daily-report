@@ -45,6 +45,9 @@ if [ "$LITESTREAM_ENABLED" = true ]; then
     fi
 fi
 
+# Prisma CLI のパス（npx が使えないため直接実行）
+PRISMA_CLI="node /app/node_modules/prisma/build/index.js"
+
 # データベースが存在しない場合は Prisma で作成
 if [ ! -f "$DB_PATH" ]; then
     echo "[INFO] データベースファイルが存在しません。Prisma マイグレーションを実行します..."
@@ -53,7 +56,7 @@ if [ ! -f "$DB_PATH" ]; then
     export DATABASE_URL="file:$DB_PATH"
 
     # Prisma マイグレーションを実行（初回デプロイ用）
-    npx prisma migrate deploy
+    $PRISMA_CLI migrate deploy
 
     echo "[INFO] データベースを初期化しました"
 else
@@ -64,7 +67,7 @@ else
 
     # 保留中のマイグレーションを適用
     echo "[INFO] Prisma マイグレーションを確認・適用します..."
-    npx prisma migrate deploy || echo "[WARNING] マイグレーションの適用をスキップしました"
+    $PRISMA_CLI migrate deploy || echo "[WARNING] マイグレーションの適用をスキップしました"
 fi
 
 # DATABASE_URL を最終的に設定
