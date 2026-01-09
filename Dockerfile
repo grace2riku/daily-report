@@ -62,10 +62,8 @@ COPY --from=builder /app/prisma ./prisma
 # Prisma Client（生成済み）をコピー
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
-# シードに必要な依存関係をコピー
+# シードに必要な依存関係をコピー（bcryptはプリビルドバイナリを含む）
 COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
-COPY --from=builder /app/node_modules/@mapbox ./node_modules/@mapbox
-COPY --from=builder /app/node_modules/node-addon-api ./node_modules/node-addon-api
 
 COPY --from=builder /app/public ./public
 
