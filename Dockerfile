@@ -32,16 +32,18 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # SQLite と Litestream に必要なパッケージをインストール
+# libc6-compat: glibc互換レイヤー（Litestreamバイナリ実行に必要）
 RUN apk add --no-cache \
     sqlite \
     ca-certificates \
     wget \
-    bash
+    bash \
+    libc6-compat
 
-# Litestream をインストール（Alpine Linux用 - 静的リンク版）
+# Litestream をインストール
 ARG LITESTREAM_VERSION=v0.3.13
 RUN wget -q -O /tmp/litestream.tar.gz \
-    https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64-static.tar.gz && \
+    https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-amd64.tar.gz && \
     tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin && \
     rm /tmp/litestream.tar.gz && \
     chmod +x /usr/local/bin/litestream
