@@ -48,6 +48,7 @@ fi
 # データベースが存在しない場合は Prisma で作成
 if [ ! -f "$DB_PATH" ]; then
     echo "[INFO] データベースファイルが存在しません。Prisma マイグレーションを実行します..."
+    NEEDS_SEED=true
 
     # DATABASE_URL を設定
     export DATABASE_URL="file:$DB_PATH"
@@ -57,6 +58,13 @@ if [ ! -f "$DB_PATH" ]; then
     prisma migrate deploy
 
     echo "[INFO] データベースを初期化しました"
+
+    # 初回デプロイ時はシードデータを投入
+    if [ "$NEEDS_SEED" = true ] && [ -f "/app/prisma/seed.ts" ]; then
+        echo "[INFO] シードデータを投入します..."
+        cd /app && tsx prisma/seed.ts
+        echo "[INFO] シードデータの投入が完了しました"
+    fi
 else
     echo "[INFO] 既存のデータベースが存在します"
 

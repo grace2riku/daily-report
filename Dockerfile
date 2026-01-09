@@ -54,14 +54,18 @@ RUN adduser --system --uid 1001 nextjs
 # データディレクトリを作成
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
-# Prisma CLI をグローバルインストール（マイグレーション実行用）
-RUN npm install -g prisma@6.2.1
+# Prisma CLI と tsx をグローバルインストール（マイグレーション・シード実行用）
+RUN npm install -g prisma@6.2.1 tsx
 
-# Prismaスキーマとマイグレーションファイルをコピー
+# Prismaスキーマ、マイグレーション、シードファイルをコピー
 COPY --from=builder /app/prisma ./prisma
 # Prisma Client（生成済み）をコピー
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# シードに必要な依存関係をコピー
+COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
+COPY --from=builder /app/node_modules/@mapbox ./node_modules/@mapbox
+COPY --from=builder /app/node_modules/node-addon-api ./node_modules/node-addon-api
 
 COPY --from=builder /app/public ./public
 
