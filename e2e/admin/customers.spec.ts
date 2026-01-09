@@ -120,8 +120,9 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('株式会社ABC');
 
-    // 2. 検索ボタンをクリック（検索ボックスの親要素内にある検索ボタン）
-    const searchSection = page.locator('.mb-6.rounded-lg.border');
+    // 2. 検索ボタンをクリック（検索ボックスの隣にある検索ボタン）
+    // 検索セクションを検索ボックスを含む親要素で特定
+    const searchSection = page.locator('div').filter({ has: searchInput }).first();
     const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
     await expect(searchButton).toBeVisible();
     await searchButton.click();
@@ -147,8 +148,8 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('C002');
 
-    // 検索ボタンをクリック（検索ボックスの親要素内にある検索ボタン）
-    const searchSection = page.locator('.mb-6.rounded-lg.border');
+    // 検索ボタンをクリック（検索ボックスの隣にある検索ボタン）
+    const searchSection = page.locator('div').filter({ has: searchInput }).first();
     const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
     await expect(searchButton).toBeVisible();
     await searchButton.click();
@@ -401,6 +402,79 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
       // 顧客がまだ一覧に存在することを確認
       await expect(targetRow).toBeVisible();
     });
+
+    test('削除ボタンをクリックして削除を実行すると、顧客が論理削除される', async ({ page }) => {
+      // このテスト専用の顧客を作成（他のテストに影響を与えないため）
+      const deleteTimestamp = Date.now();
+      const DELETE_CUSTOMER_CODE = `DELC${deleteTimestamp.toString().slice(-6)}`;
+      const DELETE_CUSTOMER_NAME = `削除テスト顧客株式会社 ${deleteTimestamp}`;
+
+      // 新規登録ボタンをクリック
+      const createButton = page.getByRole('button', { name: '新規登録' });
+      await createButton.click();
+      await expect(page.getByRole('heading', { name: '顧客 登録' })).toBeVisible({
+        timeout: 10000,
+      });
+
+      // 各項目を入力
+      await page.fill('input[name="customerCode"]', DELETE_CUSTOMER_CODE);
+      await page.fill('input[name="name"]', DELETE_CUSTOMER_NAME);
+      await page.fill('textarea[name="address"]', '東京都削除区テスト町1-2-3');
+      await page.fill('input[name="phone"]', '03-9999-9999');
+
+      const saveButton = page.getByRole('button', { name: '保存' });
+      await saveButton.click();
+
+      await expect(page.getByRole('heading', { name: '顧客 登録' })).not.toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator('text=顧客を登録しました')).toBeVisible({ timeout: 10000 });
+
+      // 作成した顧客の行を探す
+      const targetRow = page.locator('tr', { hasText: DELETE_CUSTOMER_CODE });
+      await expect(targetRow).toBeVisible({ timeout: 10000 });
+
+      // 削除ボタンをクリック
+      const deleteButton = targetRow.locator(`button[aria-label="${DELETE_CUSTOMER_NAME}を削除"]`);
+      await expect(deleteButton).toBeVisible();
+      await expect(deleteButton).toBeEnabled();
+      await deleteButton.click();
+
+      // 確認ダイアログが表示されることを確認
+      await expect(page.getByRole('heading', { name: '顧客の削除' })).toBeVisible({
+        timeout: 10000,
+      });
+
+      // 削除ボタンをクリック
+      const confirmDeleteButton = page.getByRole('button', { name: '削除' });
+      await confirmDeleteButton.click();
+
+      // ダイアログが閉じることを確認
+      await expect(page.getByRole('heading', { name: '顧客の削除' })).not.toBeVisible({
+        timeout: 10000,
+      });
+
+      // 成功トーストが表示されることを確認
+      await expect(page.locator('text=顧客を削除しました')).toBeVisible({ timeout: 10000 });
+
+      // ページをリロードして最新のデータを取得
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+
+      // 論理削除なのでレコードは残っているが、状態が「無効」に変更されていることを確認
+      const deletedRow = page.locator('tr', { hasText: DELETE_CUSTOMER_CODE });
+      await expect(deletedRow).toBeVisible({ timeout: 10000 });
+
+      // 無効バッジが表示されていることを確認
+      const inactiveBadge = deletedRow.locator('span:has-text("無効")');
+      await expect(inactiveBadge).toBeVisible();
+
+      // 削除ボタンが無効化されていることを確認
+      const deleteButtonAfter = deletedRow.locator(
+        `button[aria-label="${DELETE_CUSTOMER_NAME}を削除"]`
+      );
+      await expect(deleteButtonAfter).toBeDisabled();
+    });
   });
 
   test.describe('検索のクリア', () => {
@@ -409,7 +483,7 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
       const searchInput = page.getByRole('searchbox', { name: '検索' });
       await searchInput.fill('株式会社ABC');
 
-      const searchSection = page.locator('.mb-6.rounded-lg.border');
+      const searchSection = page.locator('div').filter({ has: searchInput }).first();
       const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
       await expect(searchButton).toBeVisible();
       await searchButton.click();

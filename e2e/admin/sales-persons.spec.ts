@@ -351,11 +351,9 @@ test.describe('営業マスタ機能 (E2E-030)', () => {
   });
 
   test.describe('削除機能', () => {
-    test('削除ボタンをクリックすると確認ダイアログが表示され、削除を実行できる', async ({
+    test('削除ボタンをクリックすると確認ダイアログが表示され、キャンセルで閉じる', async ({
       page,
     }) => {
-      // シードデータの山田太郎の行を探す（削除しても無効化されるだけ）
-      // 注意: 本テストでは E2E-030-03 で既に無効化された担当者は削除ボタンが無効なため
       // シードデータの有効な担当者（例: 鈴木花子）を対象にする
       const targetRow = page.locator('tr', { hasText: '鈴木 花子' });
       await expect(targetRow).toBeVisible({ timeout: 10000 });
@@ -382,6 +380,88 @@ test.describe('営業マスタ機能 (E2E-030)', () => {
 
       // 担当者がまだ一覧に存在することを確認
       await expect(targetRow).toBeVisible();
+    });
+
+    test('削除ボタンをクリックして削除を実行すると、営業担当者が論理削除される', async ({
+      page,
+    }) => {
+      // このテスト専用のユーザーを作成（他のテストに影響を与えないため）
+      const deleteTimestamp = Date.now();
+      const DELETE_EMPLOYEE_CODE = `DEL${deleteTimestamp.toString().slice(-6)}`;
+      const DELETE_EMAIL = `del-${deleteTimestamp}@example.com`;
+      const DELETE_NAME = `削除テスト担当者 ${deleteTimestamp}`;
+
+      // 新規登録ボタンをクリック
+      const createButton = page.getByRole('button', { name: '新規登録' });
+      await createButton.click();
+      await expect(page.getByRole('heading', { name: '営業担当者 登録' })).toBeVisible({
+        timeout: 10000,
+      });
+
+      // 各項目を入力
+      await page.fill('input[name="employeeCode"]', DELETE_EMPLOYEE_CODE);
+      await page.fill('input[name="name"]', DELETE_NAME);
+      await page.fill('input[name="email"]', DELETE_EMAIL);
+      await page.fill('input[name="password"]', 'testpassword123');
+
+      const roleCombobox = page.getByRole('combobox', { name: '役職' });
+      await roleCombobox.click();
+      await page.waitForSelector('[data-slot="select-content"]', {
+        state: 'visible',
+        timeout: 5000,
+      });
+      await page.locator('[data-slot="select-item"]').filter({ hasText: '一般' }).click();
+
+      const saveButton = page.getByRole('button', { name: '保存' });
+      await saveButton.click();
+
+      await expect(page.getByRole('heading', { name: '営業担当者 登録' })).not.toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator('text=営業担当者を登録しました')).toBeVisible({ timeout: 10000 });
+
+      // 作成した担当者の行を探す
+      const targetRow = page.locator('tr', { hasText: DELETE_EMPLOYEE_CODE });
+      await expect(targetRow).toBeVisible({ timeout: 10000 });
+
+      // 削除ボタンをクリック
+      const deleteButton = targetRow.locator(`button[aria-label="${DELETE_NAME}を削除"]`);
+      await expect(deleteButton).toBeVisible();
+      await expect(deleteButton).toBeEnabled();
+      await deleteButton.click();
+
+      // 確認ダイアログが表示されることを確認
+      await expect(page.getByRole('heading', { name: '営業担当者の削除' })).toBeVisible({
+        timeout: 10000,
+      });
+
+      // 削除ボタンをクリック
+      const confirmDeleteButton = page.getByRole('button', { name: '削除' });
+      await confirmDeleteButton.click();
+
+      // ダイアログが閉じることを確認
+      await expect(page.getByRole('heading', { name: '営業担当者の削除' })).not.toBeVisible({
+        timeout: 10000,
+      });
+
+      // 成功トーストが表示されることを確認
+      await expect(page.locator('text=営業担当者を削除しました')).toBeVisible({ timeout: 10000 });
+
+      // ページをリロードして最新のデータを取得
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+
+      // 論理削除なのでレコードは残っているが、状態が「無効」に変更されていることを確認
+      const deletedRow = page.locator('tr', { hasText: DELETE_EMPLOYEE_CODE });
+      await expect(deletedRow).toBeVisible({ timeout: 10000 });
+
+      // 無効バッジが表示されていることを確認
+      const inactiveBadge = deletedRow.locator('span:has-text("無効")');
+      await expect(inactiveBadge).toBeVisible();
+
+      // 削除ボタンが無効化されていることを確認
+      const deleteButtonAfter = deletedRow.locator(`button[aria-label="${DELETE_NAME}を削除"]`);
+      await expect(deleteButtonAfter).toBeDisabled();
     });
   });
 });
