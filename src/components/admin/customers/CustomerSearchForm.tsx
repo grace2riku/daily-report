@@ -19,7 +19,7 @@ export function CustomerSearchForm({
   isLoading = false,
 }: CustomerSearchFormProps) {
   return (
-    <div className="mb-6 rounded-lg border bg-card p-4">
+    <div className="mb-6 rounded-lg border bg-card p-4" data-testid="customer-search-section">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label htmlFor="customer-search" className="mb-2 block text-sm font-medium">
