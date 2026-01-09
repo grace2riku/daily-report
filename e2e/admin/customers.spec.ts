@@ -120,9 +120,8 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('株式会社ABC');
 
-    // 2. 検索ボタンをクリック（検索ボックスの隣にある検索ボタン）
-    // 検索セクションを検索ボックスを含む親要素で特定
-    const searchSection = page.locator('div').filter({ has: searchInput }).first();
+    // 2. 検索ボタンをクリック（検索セクション内の検索ボタン）
+    const searchSection = page.locator('[data-testid="customer-search-section"]');
     const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
     await expect(searchButton).toBeVisible();
     await searchButton.click();
@@ -148,8 +147,8 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('C002');
 
-    // 検索ボタンをクリック（検索ボックスの隣にある検索ボタン）
-    const searchSection = page.locator('div').filter({ has: searchInput }).first();
+    // 検索ボタンをクリック（検索セクション内の検索ボタン）
+    const searchSection = page.locator('[data-testid="customer-search-section"]');
     const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
     await expect(searchButton).toBeVisible();
     await searchButton.click();
@@ -483,7 +482,7 @@ test.describe('顧客マスタ機能 (E2E-031)', () => {
       const searchInput = page.getByRole('searchbox', { name: '検索' });
       await searchInput.fill('株式会社ABC');
 
-      const searchSection = page.locator('div').filter({ has: searchInput }).first();
+      const searchSection = page.locator('[data-testid="customer-search-section"]');
       const searchButton = searchSection.getByRole('button', { name: '検索', exact: true });
       await expect(searchButton).toBeVisible();
       await searchButton.click();
