@@ -1,0 +1,17 @@
+# Litestream 設定ファイル
+# SQLite データベースを Google Cloud Storage にレプリケート
+
+dbs:
+  - path: /app/data/prod.db
+    replicas:
+      - type: gcs
+        bucket: ${LITESTREAM_REPLICA_BUCKET}
+        path: daily-report/prod.db
+        # 同期間隔（デフォルト: 1s）
+        sync-interval: 1s
+        # スナップショット間隔（デフォルト: 24h）
+        snapshot-interval: 24h
+        # 保持期間（デフォルト: 24h）
+        retention: 168h  # 7日間
+        # 保持チェック間隔
+        retention-check-interval: 1h
