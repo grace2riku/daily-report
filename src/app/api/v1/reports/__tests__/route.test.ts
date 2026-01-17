@@ -417,9 +417,11 @@ describe('GET /api/v1/reports', () => {
       expect(data.success).toBe(true);
 
       // countの呼び出し引数を確認
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.reportDate).toBeDefined();
-      expect(countCall.where.reportDate.gte).toBeInstanceOf(Date);
+      const countCall = countMock.mock.calls[0]?.[0] as {
+        where?: { reportDate?: { gte?: Date; lte?: Date } };
+      };
+      expect(countCall?.where?.reportDate).toBeDefined();
+      expect(countCall?.where?.reportDate?.gte).toBeInstanceOf(Date);
     });
 
     it('終了日のみ指定した場合、その日以前の日報を取得する', async () => {
@@ -447,9 +449,11 @@ describe('GET /api/v1/reports', () => {
       expect(data.success).toBe(true);
 
       // countの呼び出し引数を確認
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.reportDate).toBeDefined();
-      expect(countCall.where.reportDate.lte).toBeInstanceOf(Date);
+      const countCall = countMock.mock.calls[0]?.[0] as {
+        where?: { reportDate?: { gte?: Date; lte?: Date } };
+      };
+      expect(countCall?.where?.reportDate).toBeDefined();
+      expect(countCall?.where?.reportDate?.lte).toBeInstanceOf(Date);
     });
 
     it('開始日と終了日を指定した場合、その範囲の日報を取得する', async () => {
@@ -483,9 +487,11 @@ describe('GET /api/v1/reports', () => {
       expect(data.success).toBe(true);
 
       // countの呼び出し引数を確認
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.reportDate.gte).toBeInstanceOf(Date);
-      expect(countCall.where.reportDate.lte).toBeInstanceOf(Date);
+      const countCall = countMock.mock.calls[0]?.[0] as {
+        where?: { reportDate?: { gte?: Date; lte?: Date } };
+      };
+      expect(countCall?.where?.reportDate?.gte).toBeInstanceOf(Date);
+      expect(countCall?.where?.reportDate?.lte).toBeInstanceOf(Date);
     });
 
     it('開始日が終了日より後の場合はバリデーションエラーを返す', async () => {
@@ -536,8 +542,8 @@ describe('GET /api/v1/reports', () => {
       expect(data.success).toBe(true);
 
       // countの呼び出し引数を確認
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.status).toBe('submitted');
+      const countCall = countMock.mock.calls[0]?.[0] as { where?: { status?: string } };
+      expect(countCall?.where?.status).toBe('submitted');
     });
 
     it('draftステータスの日報のみ取得できる', async () => {
@@ -564,8 +570,8 @@ describe('GET /api/v1/reports', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
 
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.status).toBe('draft');
+      const countCall = countMock.mock.calls[0]?.[0] as { where?: { status?: string } };
+      expect(countCall?.where?.status).toBe('draft');
     });
 
     it('reviewedステータスの日報のみ取得できる', async () => {
@@ -592,8 +598,8 @@ describe('GET /api/v1/reports', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
 
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.status).toBe('reviewed');
+      const countCall = countMock.mock.calls[0]?.[0] as { where?: { status?: string } };
+      expect(countCall?.where?.status).toBe('reviewed');
     });
 
     it('無効なステータスの場合はバリデーションエラーを返す', async () => {
@@ -644,9 +650,9 @@ describe('GET /api/v1/reports', () => {
       });
 
       // findManyの呼び出し引数を確認
-      const findManyCall = findManyMock.mock.calls[0][0];
-      expect(findManyCall.skip).toBe(0);
-      expect(findManyCall.take).toBe(20);
+      const findManyCall = findManyMock.mock.calls[0]?.[0] as { skip?: number; take?: number };
+      expect(findManyCall?.skip).toBe(0);
+      expect(findManyCall?.take).toBe(20);
     });
 
     it('page=2, per_page=10で2ページ目を取得する', async () => {
@@ -678,9 +684,9 @@ describe('GET /api/v1/reports', () => {
       });
 
       // findManyの呼び出し引数を確認
-      const findManyCall = findManyMock.mock.calls[0][0];
-      expect(findManyCall.skip).toBe(10); // (2-1) * 10 = 10
-      expect(findManyCall.take).toBe(10);
+      const findManyCall = findManyMock.mock.calls[0]?.[0] as { skip?: number; take?: number };
+      expect(findManyCall?.skip).toBe(10); // (2-1) * 10 = 10
+      expect(findManyCall?.take).toBe(10);
     });
 
     it('per_page=100を超える値はバリデーションエラーを返す', async () => {
@@ -893,15 +899,17 @@ describe('GET /api/v1/reports', () => {
       expect(data.success).toBe(true);
 
       // countの呼び出し引数を確認
-      const countCall = countMock.mock.calls[0][0];
-      expect(countCall.where.salesPersonId).toBeDefined();
-      expect(countCall.where.reportDate).toBeDefined();
-      expect(countCall.where.status).toBe('submitted');
+      const countCall = countMock.mock.calls[0]?.[0] as {
+        where?: { salesPersonId?: number; reportDate?: unknown; status?: string };
+      };
+      expect(countCall?.where?.salesPersonId).toBeDefined();
+      expect(countCall?.where?.reportDate).toBeDefined();
+      expect(countCall?.where?.status).toBe('submitted');
 
       // findManyの呼び出し引数を確認
-      const findManyCall = findManyMock.mock.calls[0][0];
-      expect(findManyCall.skip).toBe(0);
-      expect(findManyCall.take).toBe(10);
+      const findManyCall = findManyMock.mock.calls[0]?.[0] as { skip?: number; take?: number };
+      expect(findManyCall?.skip).toBe(0);
+      expect(findManyCall?.take).toBe(10);
     });
   });
 
@@ -925,8 +933,10 @@ describe('GET /api/v1/reports', () => {
       await GET(request);
 
       // findManyの呼び出し引数を確認
-      const findManyCall = findManyMock.mock.calls[0][0];
-      expect(findManyCall.orderBy).toEqual([{ reportDate: 'desc' }, { id: 'desc' }]);
+      const findManyCall = findManyMock.mock.calls[0]?.[0] as {
+        orderBy?: Array<{ reportDate?: string; id?: string }>;
+      };
+      expect(findManyCall?.orderBy).toEqual([{ reportDate: 'desc' }, { id: 'desc' }]);
     });
   });
 });

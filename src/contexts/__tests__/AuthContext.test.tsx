@@ -40,7 +40,7 @@ const mockUser: AuthUser = {
  * AuthContextの値を表示するテスト用コンポーネント
  */
 function TestConsumer() {
-  const auth = useContext(AuthContext);
+  const auth = useContext(AuthContext)!;
   const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleLogin = async () => {
