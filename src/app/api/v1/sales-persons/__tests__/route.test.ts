@@ -182,8 +182,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token);
@@ -211,8 +209,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token);
@@ -249,8 +245,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockManager.id,
         email: mockManager.email,
         role: mockManager.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token);
@@ -277,8 +271,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { is_active: 'true' });
@@ -308,8 +300,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { is_active: 'false' });
@@ -341,8 +331,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { role: 'member' });
@@ -372,8 +360,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { role: 'manager' });
@@ -403,8 +389,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { role: 'admin' });
@@ -427,8 +411,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { role: 'invalid_role' });
@@ -455,8 +437,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { is_active: 'true', role: 'member' });
@@ -487,8 +467,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token);
@@ -522,8 +500,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { page: '2', per_page: '10' });
@@ -551,8 +527,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { per_page: '101' });
@@ -571,8 +545,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { page: '0' });
@@ -590,8 +562,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token, { per_page: '0' });
@@ -614,8 +584,6 @@ describe('GET /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: mockMember.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createRequest(token);
@@ -700,8 +668,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockMember.id,
         email: mockMember.email,
         role: 'member',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
@@ -719,8 +685,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockManager.id,
         email: mockManager.email,
         role: 'manager',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
@@ -764,8 +728,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
@@ -815,8 +777,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -859,8 +819,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       // role と is_active を省略
@@ -892,8 +850,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
@@ -919,8 +875,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
@@ -941,8 +895,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -964,8 +916,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -986,8 +936,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -1008,8 +956,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -1030,8 +976,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -1052,8 +996,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -1082,8 +1024,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, {
@@ -1117,8 +1057,6 @@ describe('POST /api/v1/sales-persons', () => {
         userId: mockAdmin.id,
         email: mockAdmin.email,
         role: 'admin',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
       };
       const token = await generateToken(payload);
       const request = createPostRequest(token, validRequestBody);
