@@ -1,36 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 営業日報システム
 
-## Getting Started
+営業担当者が日々の活動報告を行い、上長がフィードバックを行うための日報管理システム。
 
-First, run the development server:
+## 機能概要
+
+- **日報管理**: 日報の作成・編集・閲覧・一覧表示
+- **訪問記録**: 1日につき複数の顧客訪問記録を登録
+- **Problem/Plan**: 課題・相談事項と明日やることを記載
+- **コメント機能**: 上長から日報へのフィードバック
+- **マスタ管理**: 営業担当者・顧客の登録・編集・削除
+
+## 技術スタック
+
+| カテゴリ | 技術 |
+|----------|------|
+| 言語 | TypeScript |
+| フレームワーク | Next.js 16 (App Router) |
+| UI | shadcn/ui, Tailwind CSS |
+| データベース | Prisma (PostgreSQL) |
+| 認証 | JWT (jose) |
+| バリデーション | Zod |
+| テスト | Vitest, Playwright |
+| デプロイ | Google Cloud Cloud Run |
+
+## 開発環境のセットアップ
+
+### 前提条件
+
+- Node.js 20以上
+- npm または yarn
+- PostgreSQL
+
+### インストール
+
+```bash
+# 依存関係のインストール
+npm install
+
+# 環境変数の設定
+cp .env.example .env
+# .envファイルを編集してDATABASE_URLとJWT_SECRETを設定
+
+# データベースのマイグレーション
+npm run db:migrate
+
+# シードデータの投入（オプション）
+npm run db:seed
+```
+
+### 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000) でアプリケーションにアクセスできます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 利用可能なスクリプト
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 開発
 
-## Learn More
+| コマンド | 説明 |
+|----------|------|
+| `npm run dev` | 開発サーバーを起動 |
+| `npm run build` | プロダクションビルド |
+| `npm run start` | プロダクションサーバーを起動 |
 
-To learn more about Next.js, take a look at the following resources:
+### コード品質
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| コマンド | 説明 |
+|----------|------|
+| `npm run lint` | ESLintでコードをチェック |
+| `npm run lint:fix` | ESLintで自動修正 |
+| `npm run format` | Prettierでフォーマット |
+| `npm run format:check` | フォーマットをチェック |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### テスト
 
-## Deploy on Vercel
+| コマンド | 説明 |
+|----------|------|
+| `npm run test` | Vitestでテストを実行 |
+| `npm run test:run` | テストを1回実行 |
+| `npm run test:coverage` | カバレッジ付きでテスト |
+| `npm run test:watch` | ウォッチモードでテスト |
+| `npm run test:e2e` | Playwrightで E2E テスト |
+| `npm run test:e2e:ui` | E2E テスト (UI モード) |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### データベース
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| コマンド | 説明 |
+|----------|------|
+| `npm run db:generate` | Prisma Client を生成 |
+| `npm run db:migrate` | マイグレーションを実行 |
+| `npm run db:push` | スキーマをDBに反映 |
+| `npm run db:seed` | シードデータを投入 |
+| `npm run db:reset` | DBをリセット |
+| `npm run db:studio` | Prisma Studio を起動 |
+
+## プロジェクト構成
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/v1/            # REST API エンドポイント
+│   ├── (auth)/            # 認証関連ページ
+│   └── (dashboard)/       # ダッシュボード関連ページ
+├── components/            # React コンポーネント
+│   └── ui/               # shadcn/ui コンポーネント
+├── contexts/             # React Context
+├── hooks/                # カスタムフック
+├── lib/                  # ユーティリティ関数
+└── types/                # TypeScript 型定義
+
+prisma/
+├── schema.prisma         # データベーススキーマ
+└── seed.ts              # シードデータ
+
+docs/
+├── api-specification.md  # API仕様書
+├── er-diagram.md        # ER図
+├── screen-definition.md # 画面定義書
+└── test-specification.md # テスト仕様書
+```
+
+## ドキュメント
+
+- [API仕様書](docs/api-specification.md)
+- [ER図](docs/er-diagram.md)
+- [画面定義書](docs/screen-definition.md)
+- [テスト仕様書](docs/test-specification.md)
+
+## ライセンス
+
+Private
